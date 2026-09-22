@@ -1,0 +1,38 @@
+{
+  "name": "contextforge-unreal",
+  "version": "1.0.0",
+  "description": "Thin ContextForge stdio adapter for Unreal Engine's official local MCP server.",
+  "type": "module",
+  "bin": {
+    "contextforge-unreal": "bin/contextforge-unreal.mjs"
+  },
+  "files": [
+    "bin",
+    "server.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "check-version": "node scripts/check-version.mjs",
+    "prepack": "npm test && npm run check-version"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0"
+  },
+  "keywords": [
+    "contextforge",
+    "mcp",
+    "unreal-engine",
+    "ue5"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/Smangsty/contextforge-unreal",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Smangsty/contextforge-unreal.git"
+  }
+}
