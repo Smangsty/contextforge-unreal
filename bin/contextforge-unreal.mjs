@@ -7,15 +7,21 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { pathToFileURL } from "node:url";
 
+export const ADAPTER_VERSION = "1.1.0";
 export const DEFAULT_UNREAL_MCP_ENDPOINT = "http://127.0.0.1:8000/mcp";
 export const LIST_TOOLSETS = "list_toolsets";
 export const DESCRIBE_TOOLSET = "describe_toolset";
 export const CALL_TOOL = "call_tool";
+export const NATIVE_TOOL_SEARCH_TOOLS = Object.freeze([
+  LIST_TOOLSETS,
+  DESCRIBE_TOOLSET,
+  CALL_TOOL
+]);
 
 export const STABLE_TOOLS = Object.freeze([
   Object.freeze({
     name: LIST_TOOLSETS,
-    description: "List Unreal MCP toolsets currently available in the running Editor.",
+    description: "List all Unreal MCP toolsets available in the running Editor.",
     inputSchema: { type: "object", properties: {} },
     annotations: {
       readOnlyHint: true,
@@ -26,7 +32,7 @@ export const STABLE_TOOLS = Object.freeze([
   }),
   Object.freeze({
     name: DESCRIBE_TOOLSET,
-    description: "Describe one Unreal MCP toolset, including tool names and input schemas.",
+    description: "Describe an Unreal MCP toolset, including its tool names and input schemas.",
     inputSchema: {
       type: "object",
       properties: {
@@ -46,17 +52,17 @@ export const STABLE_TOOLS = Object.freeze([
   }),
   Object.freeze({
     name: CALL_TOOL,
-    description: "Call an Unreal MCP tool by toolset and tool name.",
+    description: "Call a tool through Unreal MCP's native Tool Search dispatcher.",
     inputSchema: {
       type: "object",
       properties: {
         toolset_name: {
           type: "string",
-          description: "Optional toolset containing the requested tool."
+          description: "Optional toolset containing the requested tool. Omit only for a top-level MCP tool."
         },
         tool_name: {
           type: "string",
-          description: "Tool name without the toolset prefix."
+          description: "Tool name without a toolset prefix."
         },
         arguments: {
           type: "object",
@@ -100,53 +106,32 @@ export function parseLoopbackEndpoint(value = DEFAULT_UNREAL_MCP_ENDPOINT) {
   return url;
 }
 
-export function toolsetName(toolName) {
-  const separator = toolName.lastIndexOf(".");
-  return separator > 0 ? toolName.slice(0, separator) : null;
+export function missingNativeToolSearchTools(tools) {
+  const available = new Set(
+    Array.isArray(tools)
+      ? tools
+          .map((tool) => (tool !== null && typeof tool === "object" ? tool.name : null))
+          .filter((name) => typeof name === "string")
+      : []
+  );
+  return NATIVE_TOOL_SEARCH_TOOLS.filter((name) => !available.has(name));
 }
 
-export function summarizeToolsets(tools) {
-  const counts = new Map();
-  for (const tool of tools) {
-    const toolset = toolsetName(tool.name);
-    if (toolset === null) continue;
-    counts.set(toolset, (counts.get(toolset) ?? 0) + 1);
-  }
-
-  const lines = [...counts.entries()]
-    .sort(([left], [right]) => left.localeCompare(right, "en"))
-    .map(([name, count]) => `- ${name} (${count} tool${count === 1 ? "" : "s"})`);
-
-  return lines.length === 0
-    ? "No Unreal toolsets are currently registered. Enable the AllToolsets plugin if you expected engine toolsets."
-    : `Available Unreal toolsets:\n${lines.join("\n")}`;
+export function hasNativeToolSearch(tools) {
+  return missingNativeToolSearchTools(tools).length === 0;
 }
 
 export async function startContextForgeUnreal({
   endpoint = parseLoopbackEndpoint()
 } = {}) {
   const server = new Server(
-    { name: "contextforge-unreal", version: "1.0.0" },
+    { name: "contextforge-unreal", version: ADAPTER_VERSION },
     { capabilities: { tools: { listChanged: false } } }
   );
 
   let connection = null;
   let connecting = null;
-
-  async function listAllTools(client) {
-    const tools = [];
-    let cursor;
-    for (let pageIndex = 0; pageIndex < 32; pageIndex += 1) {
-      const page = await client.listTools(cursor === undefined ? undefined : { cursor });
-      for (const tool of page.tools) {
-        if (tools.length >= 1000) throw new Error("UNREAL_MCP_TOOL_LIMIT_EXCEEDED");
-        tools.push(tool);
-      }
-      cursor = page.nextCursor;
-      if (cursor === undefined || cursor === "") return tools;
-    }
-    throw new Error("UNREAL_MCP_TOOL_PAGE_LIMIT_EXCEEDED");
-  }
+  let operationTail = Promise.resolve();
 
   async function connectUpstream() {
     if (connection !== null) return connection;
@@ -154,14 +139,18 @@ export async function startContextForgeUnreal({
 
     connecting = (async () => {
       const client = new Client(
-        { name: "contextforge-unreal-adapter", version: "1.0.0" },
+        { name: "contextforge-unreal-adapter", version: ADAPTER_VERSION },
         { capabilities: {} }
       );
       const transport = new StreamableHTTPClientTransport(endpoint);
       try {
         await client.connect(transport);
-        const tools = await listAllTools(client);
-        connection = { client, transport, tools };
+        const page = await client.listTools();
+        const missing = missingNativeToolSearchTools(page.tools);
+        if (missing.length !== 0) {
+          throw new Error(`UNREAL_MCP_TOOL_SEARCH_REQUIRED:${missing.join(",")}`);
+        }
+        connection = { client, transport };
         return connection;
       } catch (error) {
         await client.close().catch(() => undefined);
@@ -184,14 +173,14 @@ export async function startContextForgeUnreal({
     }
   }
 
-  async function withUpstream(operation) {
+  async function withUpstream(operation, { retryConnectionFailure = false } = {}) {
     const reusedExistingConnection = connection !== null;
     try {
       return await operation(await connectUpstream());
     } catch (error) {
       if (isConnectionFailure(error)) {
         await resetUpstream();
-        if (reusedExistingConnection) {
+        if (retryConnectionFailure && reusedExistingConnection) {
           return await operation(await connectUpstream());
         }
       }
@@ -199,9 +188,13 @@ export async function startContextForgeUnreal({
     }
   }
 
-  async function refreshTools(state) {
-    state.tools = await listAllTools(state.client);
-    return state.tools;
+  function serialize(operation) {
+    const running = operationTail.then(operation, operation);
+    operationTail = running.then(
+      () => undefined,
+      () => undefined
+    );
+    return running;
   }
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -209,54 +202,26 @@ export async function startContextForgeUnreal({
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const args = request.params.arguments ?? {};
-    try {
-      return await withUpstream(async (state) => {
-        const directMetaTool = state.tools.some((tool) => tool.name === request.params.name);
-        if (directMetaTool) {
-          return await state.client.callTool({
-            name: request.params.name,
-            arguments: args
-          });
-        }
-
-        switch (request.params.name) {
-          case LIST_TOOLSETS:
-            return textResult(summarizeToolsets(state.tools));
-
-          case DESCRIBE_TOOLSET: {
-            const requested = requiredString(args.toolset_name);
-            if (requested === null) return toolError("Missing required parameter: toolset_name");
-            return describeToolset(state.tools, requested);
-          }
-
-          case CALL_TOOL: {
-            const toolName = requiredString(args.tool_name);
-            if (toolName === null) return toolError("Missing required parameter: tool_name");
-            const requestedToolset = optionalString(args.toolset_name);
-            const fullName =
-              requestedToolset === null ? toolName : `${requestedToolset}.${toolName}`;
-
-            if (!state.tools.some((tool) => tool.name === fullName)) {
-              await refreshTools(state);
-            }
-            if (!state.tools.some((tool) => tool.name === fullName)) {
-              return toolError(`Unreal MCP tool '${fullName}' is not currently available.`);
-            }
-
-            return await state.client.callTool({
-              name: fullName,
-              arguments: isRecord(args.arguments) ? args.arguments : {}
-            });
-          }
-
-          default:
-            return toolError(`Unsupported ContextForge Unreal tool: ${request.params.name}`);
-        }
-      });
-    } catch (error) {
-      return unrealRuntimeError(error, endpoint);
+    if (!NATIVE_TOOL_SEARCH_TOOLS.includes(request.params.name)) {
+      return toolError(`Unsupported ContextForge Unreal tool: ${request.params.name}`);
     }
+
+    const args = request.params.arguments ?? {};
+    return await serialize(async () => {
+      try {
+        return await withUpstream(
+          async ({ client }) => {
+            return await client.callTool({
+              name: request.params.name,
+              arguments: args
+            });
+          },
+          { retryConnectionFailure: isRetrySafeToolSearchRequest(request.params.name) }
+        );
+      } catch (error) {
+        return unrealRuntimeError(error, endpoint, request.params.name);
+      }
+    });
   });
 
   const shutdown = async () => {
@@ -268,37 +233,8 @@ export async function startContextForgeUnreal({
   await server.connect(new StdioServerTransport());
 }
 
-export function describeToolset(tools, requested) {
-  const prefix = `${requested}.`;
-  const matching = tools
-    .filter((tool) => tool.name.startsWith(prefix))
-    .map((tool) => ({
-      name: tool.name.slice(prefix.length),
-      ...(tool.description === undefined ? {} : { description: tool.description }),
-      inputSchema: tool.inputSchema,
-      ...(tool.outputSchema === undefined ? {} : { outputSchema: tool.outputSchema })
-    }));
-
-  if (matching.length === 0) {
-    return toolError(`Toolset '${requested}' is not currently available.`);
-  }
-  return textResult(JSON.stringify({ name: requested, tools: matching }));
-}
-
-function requiredString(value) {
-  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
-}
-
-function optionalString(value) {
-  return value === undefined || value === null || value === "" ? null : requiredString(value);
-}
-
-function isRecord(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function textResult(text) {
-  return { content: [{ type: "text", text }] };
+export function isRetrySafeToolSearchRequest(toolName) {
+  return toolName === LIST_TOOLSETS || toolName === DESCRIBE_TOOLSET;
 }
 
 function toolError(text) {
@@ -310,14 +246,35 @@ function isConnectionFailure(error) {
   return /ECONNREFUSED|ECONNRESET|EPIPE|fetch failed|connect|socket|closed/i.test(diagnostic);
 }
 
-function unrealRuntimeError(error, endpoint) {
+function unrealRuntimeError(error, endpoint, toolName) {
   const diagnostic = errorDiagnostic(error);
+
+  if (diagnostic.includes("UNREAL_MCP_TOOL_SEARCH_REQUIRED")) {
+    return toolError(
+      [
+        "Unreal MCP native Tool Search is required by ContextForge Unreal.",
+        "In Editor Preferences > Model Context Protocol, enable Enable Tool Search (the Unreal 5.8 default),",
+        "then restart the MCP server or reconnect the Editor."
+      ].join(" ")
+    );
+  }
+
   if (isConnectionFailure(error)) {
+    if (toolName === CALL_TOOL) {
+      return toolError(
+        [
+          "The Unreal MCP connection dropped while dispatching call_tool, so the tool outcome may be unknown.",
+          "ContextForge Unreal did not automatically retry the dispatch because it may have changed Editor state.",
+          "Verify the Unreal state, then retry only if needed."
+        ].join(" ")
+      );
+    }
+
     return toolError(
       [
         `Unreal MCP is unavailable at ${endpoint.origin}${endpoint.pathname}.`,
-        "Open Unreal Engine 5.8, enable the Unreal MCP plugin, and enable Auto Start Server",
-        "or run ModelContextProtocol.StartServer in the Editor console."
+        "Open Unreal Engine 5.8, enable the Model Context Protocol and desired toolset plugins,",
+        "and enable Auto Start Server or run ModelContextProtocol.StartServer in the Editor console."
       ].join(" ")
     );
   }
