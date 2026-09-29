@@ -13,7 +13,7 @@ import { pathToFileURL } from "node:url";
 
 import { REVIEWED_READ_ONLY_TOOLS } from "./read-only-tools.mjs";
 
-export const ADAPTER_VERSION = "2.0.0";
+export const ADAPTER_VERSION = "2.0.1";
 export const DEFAULT_UNREAL_MCP_ENDPOINT = "http://127.0.0.1:8000/mcp";
 export const NATIVE_TOOL_SEARCH_TOOLS = Object.freeze([
   "list_toolsets",
