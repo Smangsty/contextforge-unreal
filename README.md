@@ -25,7 +25,7 @@ After changing **Enable Tool Search**, restart the Unreal MCP server.
 
 Unreal 5.8 eager tools currently do not provide MCP read/write annotations.
 
-ContextForge Unreal therefore carries a reviewed exact-name READ manifest in `src/read-only-tools.mjs`. Listed tools are exposed with read-only authority hints. Every unlisted or newly introduced Unreal tool defaults to WRITE.
+ContextForge Unreal therefore carries a reviewed exact-name READ manifest in `src/read-only-tools.mjs`. v2.0.1 expands that manifest to 238 exact Unreal 5.8 tools. Existing manually reviewed entries are retained, and new Python-backed entries are admitted only after static review of Epic's installed UE 5.8 `tool_call` implementations. Ambiguous or mutating implementations remain WRITE. Every unlisted or newly introduced Unreal tool defaults to WRITE.
 
 This is intentionally conservative. The adapter never uses runtime naming heuristics as security authority.
 
