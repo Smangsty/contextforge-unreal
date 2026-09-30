@@ -25,15 +25,29 @@ After changing **Enable Tool Search**, restart the Unreal MCP server.
 
 Unreal 5.8 eager tools currently do not provide MCP read/write annotations.
 
-ContextForge Unreal therefore carries a reviewed exact-name READ manifest in `src/read-only-tools.mjs`. v2.0.1 expands that manifest to 238 exact Unreal 5.8 tools. Existing manually reviewed entries are retained, and new Python-backed entries are admitted only after static review of Epic's installed UE 5.8 `tool_call` implementations. Ambiguous or mutating implementations remain WRITE. Every unlisted or newly introduced Unreal tool defaults to WRITE.
+ContextForge Unreal therefore carries a reviewed exact-name READ manifest in `src/read-only-tools.mjs`. The current reviewed manifest contains 243 exact Unreal 5.8 tools. Existing manually reviewed entries are retained, and new Python-backed entries are admitted only after static review of Epic's installed UE 5.8 `tool_call` implementations. Ambiguous or mutating implementations remain WRITE. Every unlisted or newly introduced Unreal tool defaults to WRITE.
 
 This is intentionally conservative. The adapter never uses runtime naming heuristics as security authority.
+
+### Runtime material instances
+
+Epic's UE 5.8 `MaterialInstanceTools` is only partially compatible with runtime `UMaterialInstanceDynamic` objects. `list_parameters` accepts `MaterialInterface`, but the scalar, vector, texture, and static-switch value getters and setters are schema-typed to `MaterialInstanceConstant`, and Epic's helper implementation explicitly enforces that type. UE 5.8 exposes no separate MID parameter toolset, and `ProgrammaticToolset` can only orchestrate already-registered tools rather than call arbitrary Unreal APIs.
+
+ContextForge Unreal does not synthesize a parallel MID API. Generic `ObjectTools` remain available for property-level inspection or manipulation where they are sufficient; broader runtime material parameter support belongs upstream in Unreal's toolsets.
+
+### Viewport capture payloads
+
+UE 5.8 `EditorToolset.EditorAppToolset.CaptureViewport` captures the active viewport at its full framebuffer size and encodes a PNG. Its native schema exposes capture transform, annotations, and UI visibility, but no maximum dimension, image format, quality, or thumbnail option. ContextForge Unreal forwards that result unchanged and does not silently degrade screenshots.
+
+During the field audit, requesting `maxResultBytes = 8388608` still did not make the PNG inspectable because the Unreal result is serialized through a text/structured payload and the current Keel normalization path can truncate that item before the overall 8 MiB allowance is reached. Bounded-image handling therefore belongs in Unreal's native capture API or ContextForge/Keel result handling, not in this thin adapter.
 
 ## Tool changes and hot reload
 
 Unreal advertises `tools.listChanged: true`. ContextForge Unreal forwards native `notifications/tools/list_changed` notifications downstream, so ContextForge can refresh the direct tool catalog without a Skill restart.
 
 Run `ModelContextProtocol.RefreshTools` in Unreal when tool registrations change.
+
+The large eager catalog is intentional. Searching or filtering admitted tool catalogs belongs in ContextForge/Keel so exact Unreal schemas, tool identity, and reviewed authority metadata remain available; this adapter does not fall back to Unreal Tool Search.
 
 ## Connection behavior
 

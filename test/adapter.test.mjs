@@ -52,8 +52,21 @@ test("reviewed READ tools receive conservative read-only authority hints", () =>
   }
 });
 
+test("field-audited material inspection tools are READ", () => {
+  for (const name of [
+    "editor_toolset.toolsets.material.MaterialTools.get_expression_inputs",
+    "editor_toolset.toolsets.material.MaterialTools.get_property_input",
+    "editor_toolset.toolsets.material.MaterialTools.list_expression_classes",
+    "editor_toolset.toolsets.material.MaterialTools.list_parameter_groups",
+    "editor_toolset.toolsets.material_instance.MaterialInstanceTools.list_parameters"
+  ]) {
+    assert.equal(isReviewedReadOnlyTool(name), true, name);
+    assert.equal(annotateUnrealTool({ name }).annotations.readOnlyHint, true, name);
+  }
+});
+
 test("reviewed READ manifest is exact, sorted, and duplicate-free", () => {
-  assert.equal(REVIEWED_READ_ONLY_TOOLS.length, 238);
+  assert.equal(REVIEWED_READ_ONLY_TOOLS.length, 243);
   assert.deepEqual(REVIEWED_READ_ONLY_TOOLS, [...REVIEWED_READ_ONLY_TOOLS].sort());
   assert.equal(new Set(REVIEWED_READ_ONLY_TOOLS).size, REVIEWED_READ_ONLY_TOOLS.length);
 });
