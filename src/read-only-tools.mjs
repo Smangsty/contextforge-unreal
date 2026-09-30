@@ -10,6 +10,7 @@
 // Every Unreal tool not listed here is intentionally exposed as WRITE.
 
 export const REVIEWED_READ_ONLY_TOOLS = Object.freeze([
+  "EditorToolset.EditorAppToolset.CaptureViewport",
   "EditorToolset.EditorAppToolset.GetCameraTransform",
   "EditorToolset.EditorAppToolset.GetContentBrowserPath",
   "EditorToolset.EditorAppToolset.GetVisibleActors",

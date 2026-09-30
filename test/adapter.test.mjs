@@ -6,11 +6,13 @@ import {
   CAPTURE_VIEWPORT_TOOL_NAME,
   DEFAULT_UNREAL_MCP_ENDPOINT,
   NATIVE_TOOL_SEARCH_TOOLS,
+  NIAGARA_SET_STACK_INPUT_DATA_TOOL_NAME,
   annotateUnrealTool,
   annotateUnrealTools,
   installToolListChangedForwarder,
   isNativeToolSearchOnly,
   isReviewedReadOnlyTool,
+  normalizeUnrealToolSchema,
   parseLoopbackEndpoint,
   promoteCaptureViewportImage
 } from "../src/contextforge-unreal.mjs";
@@ -40,6 +42,7 @@ test("v2 requires Unreal eager tools rather than the three Tool Search meta-tool
 
 test("reviewed READ tools receive conservative read-only authority hints", () => {
   const names = [
+    CAPTURE_VIEWPORT_TOOL_NAME,
     "EditorToolset.EditorAppToolset.GetCameraTransform",
     "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools.get_blackboard",
     "animation_toolset.toolsets.sequencer.SequencerTools.get_current_sequence",
@@ -68,7 +71,7 @@ test("field-audited material inspection tools are READ", () => {
 });
 
 test("reviewed READ manifest is exact, sorted, and duplicate-free", () => {
-  assert.equal(REVIEWED_READ_ONLY_TOOLS.length, 243);
+  assert.equal(REVIEWED_READ_ONLY_TOOLS.length, 244);
   assert.deepEqual(REVIEWED_READ_ONLY_TOOLS, [...REVIEWED_READ_ONLY_TOOLS].sort());
   assert.equal(new Set(REVIEWED_READ_ONLY_TOOLS).size, REVIEWED_READ_ONLY_TOOLS.length);
 });
@@ -108,6 +111,89 @@ test("annotation overlay preserves Unreal schemas and names", () => {
   assert.deepEqual(tool.inputSchema, source.inputSchema);
   assert.deepEqual(tool.outputSchema, source.outputSchema);
   assert.equal(tool.annotations.readOnlyHint, true);
+});
+
+test("normalizes the known Niagara numeric union without weakening other schemas", () => {
+  const floatBranch = {
+    description: "float",
+    properties: { value: { type: "number" } },
+    required: ["value"],
+    title: "/Script/Niagara.NiagaraFloat",
+    type: "object"
+  };
+  const intBranch = {
+    description: "int32",
+    properties: { value: { type: "integer" } },
+    required: ["value"],
+    title: "/Script/Niagara.NiagaraInt32",
+    type: "object"
+  };
+  const source = {
+    name: NIAGARA_SET_STACK_INPUT_DATA_TOOL_NAME,
+    inputSchema: {
+      type: "object",
+      properties: {
+        inputData: {
+          properties: {
+            value: { oneOf: [floatBranch, intBranch] }
+          }
+        }
+      }
+    }
+  };
+
+  const normalized = normalizeUnrealToolSchema(source);
+  const normalizedValue = normalized.inputSchema.properties.inputData.properties.value;
+  assert.equal(normalizedValue.oneOf, undefined);
+  assert.deepEqual(normalizedValue.anyOf, [floatBranch, intBranch]);
+  assert.deepEqual(source.inputSchema.properties.inputData.properties.value.oneOf, [
+    floatBranch,
+    intBranch
+  ]);
+  assert.equal(source.inputSchema.properties.inputData.properties.value.anyOf, undefined);
+
+  const unrelated = { ...source, name: "Example.OtherTool" };
+  assert.equal(normalizeUnrealToolSchema(unrelated), unrelated);
+  const nonOverlapping = {
+    ...source,
+    inputSchema: {
+      ...source.inputSchema,
+      properties: {
+        inputData: {
+          properties: {
+            value: { oneOf: [floatBranch] }
+          }
+        }
+      }
+    }
+  };
+  assert.equal(normalizeUnrealToolSchema(nonOverlapping), nonOverlapping);
+});
+
+test("annotation overlay applies the Niagara compatibility schema before authority hints", () => {
+  const source = {
+    name: NIAGARA_SET_STACK_INPUT_DATA_TOOL_NAME,
+    inputSchema: {
+      type: "object",
+      properties: {
+        inputData: {
+          properties: {
+            value: {
+              oneOf: [
+                { properties: { value: { type: "number" } } },
+                { properties: { value: { type: "integer" } } }
+              ]
+            }
+          }
+        }
+      }
+    }
+  };
+  const tool = annotateUnrealTool(source);
+  assert.ok(Array.isArray(tool.inputSchema.properties.inputData.properties.value.anyOf));
+  assert.equal(tool.inputSchema.properties.inputData.properties.value.oneOf, undefined);
+  assert.equal(tool.annotations.readOnlyHint, false);
+  assert.equal(tool.annotations.destructiveHint, true);
 });
 
 test("promotes CaptureViewport PNG payloads to native MCP image content", () => {

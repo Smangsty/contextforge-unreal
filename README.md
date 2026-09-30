@@ -25,7 +25,7 @@ After changing **Enable Tool Search**, restart the Unreal MCP server.
 
 Unreal 5.8 eager tools currently do not provide MCP read/write annotations.
 
-ContextForge Unreal therefore carries a reviewed exact-name READ manifest in `src/read-only-tools.mjs`. The current reviewed manifest contains 243 exact Unreal 5.8 tools. Existing manually reviewed entries are retained, and new Python-backed entries are admitted only after static review of Epic's installed UE 5.8 `tool_call` implementations. Ambiguous or mutating implementations remain WRITE. Every unlisted or newly introduced Unreal tool defaults to WRITE.
+ContextForge Unreal therefore carries a reviewed exact-name READ manifest in `src/read-only-tools.mjs`. The current reviewed manifest contains 244 exact Unreal 5.8 tools. Existing manually reviewed entries are retained, and new Python-backed entries are admitted only after static review of Epic's installed UE 5.8 `tool_call` implementations. Ambiguous or mutating implementations remain WRITE. Every unlisted or newly introduced Unreal tool defaults to WRITE.
 
 This is intentionally conservative. The adapter never uses runtime naming heuristics as security authority.
 
@@ -39,7 +39,13 @@ ContextForge Unreal does not synthesize a parallel MID API. Generic `ObjectTools
 
 UE 5.8 `EditorToolset.EditorAppToolset.CaptureViewport` captures the active viewport at its full framebuffer size and encodes a PNG. Its native schema exposes capture transform, annotations, and UI visibility, but no maximum dimension, image format, quality, or thumbnail option. ContextForge Unreal does not resize or recompress the capture.
 
-Epic currently returns that PNG as base64 inside the tool's JSON payload. For this exact tool, the adapter promotes the PNG into a native MCP `image/png` content block and replaces only the duplicate base64 string in the text/structured copy with a small marker. ContextForge/Keel can then carry the image transiently to the model without forcing multi-megabyte base64 through durable text normalization.
+Epic currently returns that PNG as base64 inside the tool's JSON payload. For this exact tool, the adapter promotes the PNG into a native MCP `image/png` content block and replaces only the duplicate base64 string in the text/structured copy with a small marker. ContextForge/Keel can then carry the image transiently to the model without forcing multi-megabyte base64 through durable text normalization. `CaptureViewport` is also part of the reviewed READ manifest, so capture-result uncertainty cannot be mistaken for an unknown Editor mutation.
+
+### Niagara stack input schema compatibility
+
+UE 5.8 exposes `NiagaraToolsets.NiagaraToolset_System.SetStackInputData` with overlapping JSON Schema `oneOf` branches for Niagara float (`number`) and int32 (`integer`) values. JSON integers satisfy both branches, which makes an otherwise valid integer payload fail strict `oneOf` validation before it reaches Unreal.
+
+For this exact tool and only when both overlapping numeric branches are present, ContextForge Unreal publishes that nested value union as `anyOf`. The branch schemas and tool arguments remain unchanged, and every unrelated Unreal schema is passed through untouched.
 
 ## Tool changes and hot reload
 

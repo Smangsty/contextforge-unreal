@@ -19401,6 +19401,7 @@ import { pathToFileURL } from "node:url";
 
 // src/read-only-tools.mjs
 var REVIEWED_READ_ONLY_TOOLS = Object.freeze([
+  "EditorToolset.EditorAppToolset.CaptureViewport",
   "EditorToolset.EditorAppToolset.GetCameraTransform",
   "EditorToolset.EditorAppToolset.GetContentBrowserPath",
   "EditorToolset.EditorAppToolset.GetVisibleActors",
@@ -19647,7 +19648,7 @@ var REVIEWED_READ_ONLY_TOOLS = Object.freeze([
 ]);
 
 // src/contextforge-unreal.mjs
-var ADAPTER_VERSION = "2.0.2";
+var ADAPTER_VERSION = "2.0.3";
 var DEFAULT_UNREAL_MCP_ENDPOINT = "http://127.0.0.1:8000/mcp";
 var NATIVE_TOOL_SEARCH_TOOLS = Object.freeze([
   "list_toolsets",
@@ -19655,6 +19656,7 @@ var NATIVE_TOOL_SEARCH_TOOLS = Object.freeze([
   "call_tool"
 ]);
 var CAPTURE_VIEWPORT_TOOL_NAME = "EditorToolset.EditorAppToolset.CaptureViewport";
+var NIAGARA_SET_STACK_INPUT_DATA_TOOL_NAME = "NiagaraToolsets.NiagaraToolset_System.SetStackInputData";
 var CAPTURE_VIEWPORT_IMAGE_MARKER = "[emitted as MCP image/png]";
 var REVIEWED_READ_ONLY_TOOL_SET = new Set(REVIEWED_READ_ONLY_TOOLS);
 function parseLoopbackEndpoint(value = DEFAULT_UNREAL_MCP_ENDPOINT) {
@@ -19683,16 +19685,60 @@ function isNativeToolSearchOnly(tools) {
 function isReviewedReadOnlyTool(toolName) {
   return typeof toolName === "string" && REVIEWED_READ_ONLY_TOOL_SET.has(toolName);
 }
-function annotateUnrealTool(tool) {
-  const readOnly = isReviewedReadOnlyTool(tool?.name);
+function normalizeUnrealToolSchema(tool) {
+  if (tool?.name !== NIAGARA_SET_STACK_INPUT_DATA_TOOL_NAME || !isRecord(tool?.inputSchema)) {
+    return tool;
+  }
+  const rootProperties = tool.inputSchema.properties;
+  if (!isRecord(rootProperties)) return tool;
+  const inputData = rootProperties.inputData;
+  if (!isRecord(inputData)) return tool;
+  const inputDataProperties = inputData.properties;
+  if (!isRecord(inputDataProperties)) return tool;
+  const valueSchema = inputDataProperties.value;
+  if (!isRecord(valueSchema) || !Array.isArray(valueSchema.oneOf) || valueSchema.anyOf !== void 0) {
+    return tool;
+  }
+  const primitiveTypes2 = new Set(
+    valueSchema.oneOf.map((branch) => {
+      if (!isRecord(branch) || !isRecord(branch.properties)) return null;
+      const branchValue = branch.properties.value;
+      return isRecord(branchValue) && typeof branchValue.type === "string" ? branchValue.type : null;
+    })
+  );
+  if (!primitiveTypes2.has("number") || !primitiveTypes2.has("integer")) return tool;
+  const { oneOf, ...valueSchemaWithoutOneOf } = valueSchema;
   return {
     ...tool,
+    inputSchema: {
+      ...tool.inputSchema,
+      properties: {
+        ...rootProperties,
+        inputData: {
+          ...inputData,
+          properties: {
+            ...inputDataProperties,
+            value: {
+              ...valueSchemaWithoutOneOf,
+              anyOf: oneOf
+            }
+          }
+        }
+      }
+    }
+  };
+}
+function annotateUnrealTool(tool) {
+  const normalizedTool = normalizeUnrealToolSchema(tool);
+  const readOnly = isReviewedReadOnlyTool(normalizedTool?.name);
+  return {
+    ...normalizedTool,
     annotations: {
-      ...tool?.annotations ?? {},
+      ...normalizedTool?.annotations ?? {},
       readOnlyHint: readOnly,
       destructiveHint: !readOnly,
       idempotentHint: readOnly,
-      openWorldHint: tool?.annotations?.openWorldHint === true
+      openWorldHint: normalizedTool?.annotations?.openWorldHint === true
     }
   };
 }
@@ -19958,11 +20004,13 @@ export {
   CAPTURE_VIEWPORT_TOOL_NAME,
   DEFAULT_UNREAL_MCP_ENDPOINT,
   NATIVE_TOOL_SEARCH_TOOLS,
+  NIAGARA_SET_STACK_INPUT_DATA_TOOL_NAME,
   annotateUnrealTool,
   annotateUnrealTools,
   installToolListChangedForwarder,
   isNativeToolSearchOnly,
   isReviewedReadOnlyTool,
+  normalizeUnrealToolSchema,
   parseLoopbackEndpoint,
   promoteCaptureViewportImage,
   startContextForgeUnreal

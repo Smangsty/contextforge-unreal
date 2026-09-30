@@ -13,7 +13,7 @@ import { pathToFileURL } from "node:url";
 
 import { REVIEWED_READ_ONLY_TOOLS } from "./read-only-tools.mjs";
 
-export const ADAPTER_VERSION = "2.0.2";
+export const ADAPTER_VERSION = "2.0.3";
 export const DEFAULT_UNREAL_MCP_ENDPOINT = "http://127.0.0.1:8000/mcp";
 export const NATIVE_TOOL_SEARCH_TOOLS = Object.freeze([
   "list_toolsets",
@@ -21,6 +21,8 @@ export const NATIVE_TOOL_SEARCH_TOOLS = Object.freeze([
   "call_tool"
 ]);
 export const CAPTURE_VIEWPORT_TOOL_NAME = "EditorToolset.EditorAppToolset.CaptureViewport";
+export const NIAGARA_SET_STACK_INPUT_DATA_TOOL_NAME =
+  "NiagaraToolsets.NiagaraToolset_System.SetStackInputData";
 const CAPTURE_VIEWPORT_IMAGE_MARKER = "[emitted as MCP image/png]";
 
 const REVIEWED_READ_ONLY_TOOL_SET = new Set(REVIEWED_READ_ONLY_TOOLS);
@@ -65,16 +67,64 @@ export function isReviewedReadOnlyTool(toolName) {
   return typeof toolName === "string" && REVIEWED_READ_ONLY_TOOL_SET.has(toolName);
 }
 
-export function annotateUnrealTool(tool) {
-  const readOnly = isReviewedReadOnlyTool(tool?.name);
+export function normalizeUnrealToolSchema(tool) {
+  if (tool?.name !== NIAGARA_SET_STACK_INPUT_DATA_TOOL_NAME || !isRecord(tool?.inputSchema)) {
+    return tool;
+  }
+
+  const rootProperties = tool.inputSchema.properties;
+  if (!isRecord(rootProperties)) return tool;
+  const inputData = rootProperties.inputData;
+  if (!isRecord(inputData)) return tool;
+  const inputDataProperties = inputData.properties;
+  if (!isRecord(inputDataProperties)) return tool;
+  const valueSchema = inputDataProperties.value;
+  if (!isRecord(valueSchema) || !Array.isArray(valueSchema.oneOf) || valueSchema.anyOf !== undefined) {
+    return tool;
+  }
+
+  const primitiveTypes = new Set(
+    valueSchema.oneOf.map((branch) => {
+      if (!isRecord(branch) || !isRecord(branch.properties)) return null;
+      const branchValue = branch.properties.value;
+      return isRecord(branchValue) && typeof branchValue.type === "string" ? branchValue.type : null;
+    })
+  );
+  if (!primitiveTypes.has("number") || !primitiveTypes.has("integer")) return tool;
+
+  const { oneOf, ...valueSchemaWithoutOneOf } = valueSchema;
   return {
     ...tool,
+    inputSchema: {
+      ...tool.inputSchema,
+      properties: {
+        ...rootProperties,
+        inputData: {
+          ...inputData,
+          properties: {
+            ...inputDataProperties,
+            value: {
+              ...valueSchemaWithoutOneOf,
+              anyOf: oneOf
+            }
+          }
+        }
+      }
+    }
+  };
+}
+
+export function annotateUnrealTool(tool) {
+  const normalizedTool = normalizeUnrealToolSchema(tool);
+  const readOnly = isReviewedReadOnlyTool(normalizedTool?.name);
+  return {
+    ...normalizedTool,
     annotations: {
-      ...(tool?.annotations ?? {}),
+      ...(normalizedTool?.annotations ?? {}),
       readOnlyHint: readOnly,
       destructiveHint: !readOnly,
       idempotentHint: readOnly,
-      openWorldHint: tool?.annotations?.openWorldHint === true
+      openWorldHint: normalizedTool?.annotations?.openWorldHint === true
     }
   };
 }
