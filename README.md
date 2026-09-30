@@ -37,9 +37,9 @@ ContextForge Unreal does not synthesize a parallel MID API. Generic `ObjectTools
 
 ### Viewport capture payloads
 
-UE 5.8 `EditorToolset.EditorAppToolset.CaptureViewport` captures the active viewport at its full framebuffer size and encodes a PNG. Its native schema exposes capture transform, annotations, and UI visibility, but no maximum dimension, image format, quality, or thumbnail option. ContextForge Unreal forwards that result unchanged and does not silently degrade screenshots.
+UE 5.8 `EditorToolset.EditorAppToolset.CaptureViewport` captures the active viewport at its full framebuffer size and encodes a PNG. Its native schema exposes capture transform, annotations, and UI visibility, but no maximum dimension, image format, quality, or thumbnail option. ContextForge Unreal does not resize or recompress the capture.
 
-During the field audit, requesting `maxResultBytes = 8388608` still did not make the PNG inspectable because the Unreal result is serialized through a text/structured payload and the current Keel normalization path can truncate that item before the overall 8 MiB allowance is reached. Bounded-image handling therefore belongs in Unreal's native capture API or ContextForge/Keel result handling, not in this thin adapter.
+Epic currently returns that PNG as base64 inside the tool's JSON payload. For this exact tool, the adapter promotes the PNG into a native MCP `image/png` content block and replaces only the duplicate base64 string in the text/structured copy with a small marker. ContextForge/Keel can then carry the image transiently to the model without forcing multi-megabyte base64 through durable text normalization.
 
 ## Tool changes and hot reload
 

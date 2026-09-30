@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   ADAPTER_VERSION,
+  CAPTURE_VIEWPORT_TOOL_NAME,
   DEFAULT_UNREAL_MCP_ENDPOINT,
   NATIVE_TOOL_SEARCH_TOOLS,
   annotateUnrealTool,
@@ -10,7 +11,8 @@ import {
   installToolListChangedForwarder,
   isNativeToolSearchOnly,
   isReviewedReadOnlyTool,
-  parseLoopbackEndpoint
+  parseLoopbackEndpoint,
+  promoteCaptureViewportImage
 } from "../src/contextforge-unreal.mjs";
 import { REVIEWED_READ_ONLY_TOOLS } from "../src/read-only-tools.mjs";
 
@@ -28,7 +30,7 @@ test("accepts loopback HTTP endpoints only", () => {
 });
 
 test("v2 requires Unreal eager tools rather than the three Tool Search meta-tools", () => {
-  assert.equal(ADAPTER_VERSION, "2.0.1");
+  assert.match(ADAPTER_VERSION, /^2\./);
   assert.equal(isNativeToolSearchOnly(NATIVE_TOOL_SEARCH_TOOLS.map((name) => ({ name }))), true);
   assert.equal(isNativeToolSearchOnly([
     { name: "EditorToolset.EditorAppToolset.GetCameraTransform" },
@@ -106,6 +108,29 @@ test("annotation overlay preserves Unreal schemas and names", () => {
   assert.deepEqual(tool.inputSchema, source.inputSchema);
   assert.deepEqual(tool.outputSchema, source.outputSchema);
   assert.equal(tool.annotations.readOnlyHint, true);
+});
+
+test("promotes CaptureViewport PNG payloads to native MCP image content", () => {
+  const png =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=";
+  const source = {
+    content: [{ type: "text", text: JSON.stringify({ Image: png, Width: 1 }) }],
+    structuredContent: { Image: png, Width: 1 },
+    isError: false
+  };
+  const promoted = promoteCaptureViewportImage(CAPTURE_VIEWPORT_TOOL_NAME, source);
+
+  assert.equal(promoted.content.length, 2);
+  assert.deepEqual(JSON.parse(promoted.content[0].text), {
+    Image: "[emitted as MCP image/png]",
+    Width: 1
+  });
+  assert.deepEqual(promoted.content[1], { type: "image", data: png, mimeType: "image/png" });
+  assert.deepEqual(promoted.structuredContent, {
+    Image: "[emitted as MCP image/png]",
+    Width: 1
+  });
+  assert.equal(promoteCaptureViewportImage("Example.OtherTool", source), source);
 });
 
 test("forwards Unreal tools/list_changed notifications downstream", async () => {

@@ -13,13 +13,15 @@ import { pathToFileURL } from "node:url";
 
 import { REVIEWED_READ_ONLY_TOOLS } from "./read-only-tools.mjs";
 
-export const ADAPTER_VERSION = "2.0.1";
+export const ADAPTER_VERSION = "2.0.2";
 export const DEFAULT_UNREAL_MCP_ENDPOINT = "http://127.0.0.1:8000/mcp";
 export const NATIVE_TOOL_SEARCH_TOOLS = Object.freeze([
   "list_toolsets",
   "describe_toolset",
   "call_tool"
 ]);
+export const CAPTURE_VIEWPORT_TOOL_NAME = "EditorToolset.EditorAppToolset.CaptureViewport";
+const CAPTURE_VIEWPORT_IMAGE_MARKER = "[emitted as MCP image/png]";
 
 const REVIEWED_READ_ONLY_TOOL_SET = new Set(REVIEWED_READ_ONLY_TOOLS);
 
@@ -79,6 +81,80 @@ export function annotateUnrealTool(tool) {
 
 export function annotateUnrealTools(tools) {
   return Array.isArray(tools) ? tools.map(annotateUnrealTool) : [];
+}
+
+export function promoteCaptureViewportImage(toolName, result) {
+  if (toolName !== CAPTURE_VIEWPORT_TOOL_NAME || !isRecord(result) || !Array.isArray(result.content)) {
+    return result;
+  }
+
+  let imageData = null;
+  if (isRecord(result.structuredContent) && isPngBase64(result.structuredContent.Image)) {
+    imageData = result.structuredContent.Image;
+  }
+  if (imageData === null) {
+    for (const item of result.content) {
+      if (!isRecord(item) || item.type !== "text" || typeof item.text !== "string") continue;
+      const parsed = parseJsonRecord(item.text);
+      if (parsed !== null && isPngBase64(parsed.Image)) {
+        imageData = parsed.Image;
+        break;
+      }
+    }
+  }
+  if (imageData === null) return result;
+
+  const content = result.content.map((item) => {
+    if (!isRecord(item) || item.type !== "text" || typeof item.text !== "string") return item;
+    const parsed = parseJsonRecord(item.text);
+    if (parsed === null || parsed.Image !== imageData) return item;
+    return { ...item, text: JSON.stringify({ ...parsed, Image: CAPTURE_VIEWPORT_IMAGE_MARKER }) };
+  });
+  if (
+    !content.some(
+      (item) =>
+        isRecord(item) &&
+        item.type === "image" &&
+        item.mimeType === "image/png" &&
+        item.data === imageData
+    )
+  ) {
+    content.push({ type: "image", data: imageData, mimeType: "image/png" });
+  }
+
+  const structuredContent =
+    isRecord(result.structuredContent) && result.structuredContent.Image === imageData
+      ? { ...result.structuredContent, Image: CAPTURE_VIEWPORT_IMAGE_MARKER }
+      : result.structuredContent;
+
+  return {
+    ...result,
+    content,
+    ...(structuredContent === undefined ? {} : { structuredContent })
+  };
+}
+
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseJsonRecord(text) {
+  try {
+    const parsed = JSON.parse(text);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function isPngBase64(value) {
+  return (
+    typeof value === "string" &&
+    value.length >= 16 &&
+    value.length % 4 === 0 &&
+    value.startsWith("iVBORw0KGgo") &&
+    /^[A-Za-z0-9+/]+={0,2}$/.test(value)
+  );
 }
 
 export function installToolListChangedForwarder(client, server) {
@@ -196,7 +272,7 @@ export async function startContextForgeUnreal({ endpoint = parseLoopbackEndpoint
 
     return await serialize(async () => {
       try {
-        return await withUpstream(
+        const upstreamResult = await withUpstream(
           async ({ client }) =>
             await client.callTool({
               name: toolName,
@@ -204,6 +280,7 @@ export async function startContextForgeUnreal({ endpoint = parseLoopbackEndpoint
             }),
           { retryConnectionFailure: retrySafe }
         );
+        return promoteCaptureViewportImage(toolName, upstreamResult);
       } catch (error) {
         return unrealRuntimeError(error, endpoint, toolName, retrySafe);
       }

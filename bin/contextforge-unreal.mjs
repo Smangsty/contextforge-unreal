@@ -19647,13 +19647,15 @@ var REVIEWED_READ_ONLY_TOOLS = Object.freeze([
 ]);
 
 // src/contextforge-unreal.mjs
-var ADAPTER_VERSION = "2.0.1";
+var ADAPTER_VERSION = "2.0.2";
 var DEFAULT_UNREAL_MCP_ENDPOINT = "http://127.0.0.1:8000/mcp";
 var NATIVE_TOOL_SEARCH_TOOLS = Object.freeze([
   "list_toolsets",
   "describe_toolset",
   "call_tool"
 ]);
+var CAPTURE_VIEWPORT_TOOL_NAME = "EditorToolset.EditorAppToolset.CaptureViewport";
+var CAPTURE_VIEWPORT_IMAGE_MARKER = "[emitted as MCP image/png]";
 var REVIEWED_READ_ONLY_TOOL_SET = new Set(REVIEWED_READ_ONLY_TOOLS);
 function parseLoopbackEndpoint(value = DEFAULT_UNREAL_MCP_ENDPOINT) {
   if (typeof value !== "string" || value.length < 8 || value.length > 2048) {
@@ -19696,6 +19698,57 @@ function annotateUnrealTool(tool) {
 }
 function annotateUnrealTools(tools) {
   return Array.isArray(tools) ? tools.map(annotateUnrealTool) : [];
+}
+function promoteCaptureViewportImage(toolName, result) {
+  if (toolName !== CAPTURE_VIEWPORT_TOOL_NAME || !isRecord(result) || !Array.isArray(result.content)) {
+    return result;
+  }
+  let imageData = null;
+  if (isRecord(result.structuredContent) && isPngBase64(result.structuredContent.Image)) {
+    imageData = result.structuredContent.Image;
+  }
+  if (imageData === null) {
+    for (const item of result.content) {
+      if (!isRecord(item) || item.type !== "text" || typeof item.text !== "string") continue;
+      const parsed = parseJsonRecord(item.text);
+      if (parsed !== null && isPngBase64(parsed.Image)) {
+        imageData = parsed.Image;
+        break;
+      }
+    }
+  }
+  if (imageData === null) return result;
+  const content = result.content.map((item) => {
+    if (!isRecord(item) || item.type !== "text" || typeof item.text !== "string") return item;
+    const parsed = parseJsonRecord(item.text);
+    if (parsed === null || parsed.Image !== imageData) return item;
+    return { ...item, text: JSON.stringify({ ...parsed, Image: CAPTURE_VIEWPORT_IMAGE_MARKER }) };
+  });
+  if (!content.some(
+    (item) => isRecord(item) && item.type === "image" && item.mimeType === "image/png" && item.data === imageData
+  )) {
+    content.push({ type: "image", data: imageData, mimeType: "image/png" });
+  }
+  const structuredContent = isRecord(result.structuredContent) && result.structuredContent.Image === imageData ? { ...result.structuredContent, Image: CAPTURE_VIEWPORT_IMAGE_MARKER } : result.structuredContent;
+  return {
+    ...result,
+    content,
+    ...structuredContent === void 0 ? {} : { structuredContent }
+  };
+}
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function parseJsonRecord(text) {
+  try {
+    const parsed = JSON.parse(text);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+function isPngBase64(value) {
+  return typeof value === "string" && value.length >= 16 && value.length % 4 === 0 && value.startsWith("iVBORw0KGgo") && /^[A-Za-z0-9+/]+={0,2}$/.test(value);
 }
 function installToolListChangedForwarder(client, server) {
   client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
@@ -19798,13 +19851,14 @@ async function startContextForgeUnreal({ endpoint = parseLoopbackEndpoint() } = 
     const retrySafe = isReviewedReadOnlyTool(toolName);
     return await serialize(async () => {
       try {
-        return await withUpstream(
+        const upstreamResult = await withUpstream(
           async ({ client }) => await client.callTool({
             name: toolName,
             arguments: args
           }),
           { retryConnectionFailure: retrySafe }
         );
+        return promoteCaptureViewportImage(toolName, upstreamResult);
       } catch (error2) {
         return unrealRuntimeError(error2, endpoint, toolName, retrySafe);
       }
@@ -19901,6 +19955,7 @@ if (isMainModule()) {
 }
 export {
   ADAPTER_VERSION,
+  CAPTURE_VIEWPORT_TOOL_NAME,
   DEFAULT_UNREAL_MCP_ENDPOINT,
   NATIVE_TOOL_SEARCH_TOOLS,
   annotateUnrealTool,
@@ -19909,5 +19964,6 @@ export {
   isNativeToolSearchOnly,
   isReviewedReadOnlyTool,
   parseLoopbackEndpoint,
+  promoteCaptureViewportImage,
   startContextForgeUnreal
 };
