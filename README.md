@@ -35,11 +35,15 @@ Epic's UE 5.8 `MaterialInstanceTools` is only partially compatible with runtime 
 
 ContextForge Unreal does not synthesize a parallel MID API. Generic `ObjectTools` remain available for property-level inspection or manipulation where they are sufficient; broader runtime material parameter support belongs upstream in Unreal's toolsets.
 
-### Viewport capture payloads
+### Image capture compatibility
 
-UE 5.8 `EditorToolset.EditorAppToolset.CaptureViewport` captures the active viewport at its full framebuffer size and encodes a PNG. Its native schema exposes capture transform, annotations, and UI visibility, but no maximum dimension, image format, quality, or thumbnail option. ContextForge Unreal does not resize or recompress the capture.
+UE 5.8 has two ToolsetRegistry/MCP boundary defects that affect image capture. Omitted `TOptional<>` parameters are rejected unless the published schema also supplies a default, and ToolsetRegistry image values are serialized into MCP text instead of native image content.
 
-Epic currently returns that PNG as base64 inside the tool's JSON payload. For this exact tool, the adapter promotes the PNG into a native MCP `image/png` content block and replaces only the duplicate base64 string in the text/structured copy with a small marker. ContextForge/Keel can then carry the image transiently to the model without forcing multi-megabyte base64 through durable text normalization. `CaptureViewport` is also part of the reviewed READ manifest, so capture-result uncertainty cannot be mistaken for an unknown Editor mutation.
+For `EditorToolset.EditorAppToolset.CaptureViewport`, ContextForge Unreal supplies explicit `null` only for omitted `captureTransform` and `annotations`. UE 5.8 maps those nulls to unset `TOptional<>` values, so an omitted transform still uses the live viewport camera and omitted annotations stay disabled. Explicit caller values are never replaced.
+
+For `CaptureViewport`, `CaptureEditorImage`, and `CaptureAssetImage`, the adapter recognizes only Epic's declared `FToolsetImage` return locations. It promotes the PNG into native MCP `image/png` content, removes the duplicate base64 from text/structured metadata, and preserves useful non-image metadata such as viewport camera location, rotation, FOV, grid, and actor labels. It does not scan arbitrary tool JSON for image-looking fields.
+
+All three capture tools are statically reviewed READ operations in UE 5.8. ContextForge Unreal does not resize or recompress captures.
 
 ### Niagara stack input schema compatibility
 

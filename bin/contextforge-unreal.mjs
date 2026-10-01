@@ -19401,6 +19401,8 @@ import { pathToFileURL } from "node:url";
 
 // src/read-only-tools.mjs
 var REVIEWED_READ_ONLY_TOOLS = Object.freeze([
+  "EditorToolset.EditorAppToolset.CaptureAssetImage",
+  "EditorToolset.EditorAppToolset.CaptureEditorImage",
   "EditorToolset.EditorAppToolset.CaptureViewport",
   "EditorToolset.EditorAppToolset.GetCameraTransform",
   "EditorToolset.EditorAppToolset.GetContentBrowserPath",
@@ -19648,17 +19650,25 @@ var REVIEWED_READ_ONLY_TOOLS = Object.freeze([
 ]);
 
 // src/contextforge-unreal.mjs
-var ADAPTER_VERSION = "2.0.3";
+var ADAPTER_VERSION = "2.0.4";
 var DEFAULT_UNREAL_MCP_ENDPOINT = "http://127.0.0.1:8000/mcp";
 var NATIVE_TOOL_SEARCH_TOOLS = Object.freeze([
   "list_toolsets",
   "describe_toolset",
   "call_tool"
 ]);
+var CAPTURE_ASSET_IMAGE_TOOL_NAME = "EditorToolset.EditorAppToolset.CaptureAssetImage";
+var CAPTURE_EDITOR_IMAGE_TOOL_NAME = "EditorToolset.EditorAppToolset.CaptureEditorImage";
 var CAPTURE_VIEWPORT_TOOL_NAME = "EditorToolset.EditorAppToolset.CaptureViewport";
+var IMAGE_CAPTURE_TOOL_NAMES = Object.freeze([
+  CAPTURE_ASSET_IMAGE_TOOL_NAME,
+  CAPTURE_EDITOR_IMAGE_TOOL_NAME,
+  CAPTURE_VIEWPORT_TOOL_NAME
+]);
 var NIAGARA_SET_STACK_INPUT_DATA_TOOL_NAME = "NiagaraToolsets.NiagaraToolset_System.SetStackInputData";
-var CAPTURE_VIEWPORT_IMAGE_MARKER = "[emitted as MCP image/png]";
+var CAPTURE_IMAGE_DATA_MARKER = "[emitted as MCP image/png]";
 var REVIEWED_READ_ONLY_TOOL_SET = new Set(REVIEWED_READ_ONLY_TOOLS);
+var IMAGE_CAPTURE_TOOL_SET = new Set(IMAGE_CAPTURE_TOOL_NAMES);
 function parseLoopbackEndpoint(value = DEFAULT_UNREAL_MCP_ENDPOINT) {
   if (typeof value !== "string" || value.length < 8 || value.length > 2048) {
     throw new Error("UNREAL_MCP_ENDPOINT_INVALID");
@@ -19745,42 +19755,99 @@ function annotateUnrealTool(tool) {
 function annotateUnrealTools(tools) {
   return Array.isArray(tools) ? tools.map(annotateUnrealTool) : [];
 }
-function promoteCaptureViewportImage(toolName, result) {
-  if (toolName !== CAPTURE_VIEWPORT_TOOL_NAME || !isRecord(result) || !Array.isArray(result.content)) {
-    return result;
+function normalizeUnrealToolArguments(toolName, args) {
+  const source = isRecord(args) ? args : {};
+  if (toolName !== CAPTURE_VIEWPORT_TOOL_NAME) return source;
+  const normalized = { ...source };
+  if (!Object.prototype.hasOwnProperty.call(normalized, "captureTransform")) {
+    normalized.captureTransform = null;
   }
-  let imageData = null;
-  if (isRecord(result.structuredContent) && isPngBase64(result.structuredContent.Image)) {
-    imageData = result.structuredContent.Image;
+  if (!Object.prototype.hasOwnProperty.call(normalized, "annotations")) {
+    normalized.annotations = null;
   }
-  if (imageData === null) {
-    for (const item of result.content) {
-      if (!isRecord(item) || item.type !== "text" || typeof item.text !== "string") continue;
-      const parsed = parseJsonRecord(item.text);
-      if (parsed !== null && isPngBase64(parsed.Image)) {
-        imageData = parsed.Image;
-        break;
-      }
+  return normalized;
+}
+function captureImageMatch(toolName, payload) {
+  if (!isRecord(payload)) return null;
+  if (toolName === CAPTURE_VIEWPORT_TOOL_NAME) {
+    const returnValue = payload.returnValue;
+    if (isRecord(returnValue) && isToolsetImage(returnValue.image)) {
+      return {
+        data: returnValue.image.data,
+        mimeType: returnValue.image.mimeType,
+        sanitized: {
+          ...payload,
+          returnValue: {
+            ...returnValue,
+            image: { ...returnValue.image, data: CAPTURE_IMAGE_DATA_MARKER }
+          }
+        }
+      };
+    }
+    if (isPngBase64(payload.Image)) {
+      return {
+        data: payload.Image,
+        mimeType: "image/png",
+        sanitized: { ...payload, Image: CAPTURE_IMAGE_DATA_MARKER }
+      };
     }
   }
-  if (imageData === null) return result;
+  if ((toolName === CAPTURE_EDITOR_IMAGE_TOOL_NAME || toolName === CAPTURE_ASSET_IMAGE_TOOL_NAME) && isToolsetImage(payload.returnValue)) {
+    return {
+      data: payload.returnValue.data,
+      mimeType: payload.returnValue.mimeType,
+      sanitized: {
+        ...payload,
+        returnValue: { ...payload.returnValue, data: CAPTURE_IMAGE_DATA_MARKER }
+      }
+    };
+  }
+  return null;
+}
+function promoteUnrealImageResult(toolName, result) {
+  if (!IMAGE_CAPTURE_TOOL_SET.has(toolName) || !isRecord(result) || !Array.isArray(result.content) || result.isError === true) {
+    return result;
+  }
+  let image = null;
+  let structuredContent = result.structuredContent;
+  let sanitizedTextPayload = null;
+  if (isRecord(structuredContent)) {
+    const match = captureImageMatch(toolName, structuredContent);
+    if (match !== null) {
+      image = { data: match.data, mimeType: match.mimeType };
+      structuredContent = match.sanitized;
+    }
+  }
   const content = result.content.map((item) => {
     if (!isRecord(item) || item.type !== "text" || typeof item.text !== "string") return item;
     const parsed = parseJsonRecord(item.text);
-    if (parsed === null || parsed.Image !== imageData) return item;
-    return { ...item, text: JSON.stringify({ ...parsed, Image: CAPTURE_VIEWPORT_IMAGE_MARKER }) };
+    if (parsed === null) return item;
+    const match = captureImageMatch(toolName, parsed);
+    if (match === null) return item;
+    if (image !== null && (image.data !== match.data || image.mimeType !== match.mimeType)) {
+      return item;
+    }
+    image ??= { data: match.data, mimeType: match.mimeType };
+    sanitizedTextPayload ??= match.sanitized;
+    return { ...item, text: JSON.stringify(match.sanitized) };
   });
+  if (image === null) return result;
   if (!content.some(
-    (item) => isRecord(item) && item.type === "image" && item.mimeType === "image/png" && item.data === imageData
+    (item) => isRecord(item) && item.type === "image" && item.mimeType === image.mimeType && item.data === image.data
   )) {
-    content.push({ type: "image", data: imageData, mimeType: "image/png" });
+    content.push({ type: "image", data: image.data, mimeType: image.mimeType });
   }
-  const structuredContent = isRecord(result.structuredContent) && result.structuredContent.Image === imageData ? { ...result.structuredContent, Image: CAPTURE_VIEWPORT_IMAGE_MARKER } : result.structuredContent;
+  if (structuredContent === void 0 && sanitizedTextPayload !== null) {
+    structuredContent = sanitizedTextPayload;
+  }
   return {
     ...result,
     content,
     ...structuredContent === void 0 ? {} : { structuredContent }
   };
+}
+function promoteCaptureViewportImage(toolName, result) {
+  return promoteUnrealImageResult(toolName, result);
 }
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -19795,6 +19862,9 @@ function parseJsonRecord(text) {
 }
 function isPngBase64(value) {
   return typeof value === "string" && value.length >= 16 && value.length % 4 === 0 && value.startsWith("iVBORw0KGgo") && /^[A-Za-z0-9+/]+={0,2}$/.test(value);
+}
+function isToolsetImage(value) {
+  return isRecord(value) && value.mimeType === "image/png" && isPngBase64(value.data);
 }
 function installToolListChangedForwarder(client, server) {
   client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
@@ -19893,7 +19963,7 @@ async function startContextForgeUnreal({ endpoint = parseLoopbackEndpoint() } = 
   });
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const toolName = request.params.name;
-    const args = request.params.arguments ?? {};
+    const args = normalizeUnrealToolArguments(toolName, request.params.arguments ?? {});
     const retrySafe = isReviewedReadOnlyTool(toolName);
     return await serialize(async () => {
       try {
@@ -19904,7 +19974,7 @@ async function startContextForgeUnreal({ endpoint = parseLoopbackEndpoint() } = 
           }),
           { retryConnectionFailure: retrySafe }
         );
-        return promoteCaptureViewportImage(toolName, upstreamResult);
+        return promoteUnrealImageResult(toolName, upstreamResult);
       } catch (error2) {
         return unrealRuntimeError(error2, endpoint, toolName, retrySafe);
       }
@@ -20001,8 +20071,11 @@ if (isMainModule()) {
 }
 export {
   ADAPTER_VERSION,
+  CAPTURE_ASSET_IMAGE_TOOL_NAME,
+  CAPTURE_EDITOR_IMAGE_TOOL_NAME,
   CAPTURE_VIEWPORT_TOOL_NAME,
   DEFAULT_UNREAL_MCP_ENDPOINT,
+  IMAGE_CAPTURE_TOOL_NAMES,
   NATIVE_TOOL_SEARCH_TOOLS,
   NIAGARA_SET_STACK_INPUT_DATA_TOOL_NAME,
   annotateUnrealTool,
@@ -20010,8 +20083,10 @@ export {
   installToolListChangedForwarder,
   isNativeToolSearchOnly,
   isReviewedReadOnlyTool,
+  normalizeUnrealToolArguments,
   normalizeUnrealToolSchema,
   parseLoopbackEndpoint,
   promoteCaptureViewportImage,
+  promoteUnrealImageResult,
   startContextForgeUnreal
 };

@@ -1,6 +1,6 @@
 {
   "name": "contextforge-unreal",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "description": "Thin ContextForge stdio adapter for Unreal Engine's official local MCP server.",
   "type": "module",
   "bin": {

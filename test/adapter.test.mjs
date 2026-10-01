@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   ADAPTER_VERSION,
+  CAPTURE_ASSET_IMAGE_TOOL_NAME,
+  CAPTURE_EDITOR_IMAGE_TOOL_NAME,
   CAPTURE_VIEWPORT_TOOL_NAME,
   DEFAULT_UNREAL_MCP_ENDPOINT,
   NATIVE_TOOL_SEARCH_TOOLS,
@@ -12,9 +14,11 @@ import {
   installToolListChangedForwarder,
   isNativeToolSearchOnly,
   isReviewedReadOnlyTool,
+  normalizeUnrealToolArguments,
   normalizeUnrealToolSchema,
   parseLoopbackEndpoint,
-  promoteCaptureViewportImage
+  promoteCaptureViewportImage,
+  promoteUnrealImageResult
 } from "../src/contextforge-unreal.mjs";
 import { REVIEWED_READ_ONLY_TOOLS } from "../src/read-only-tools.mjs";
 
@@ -42,6 +46,8 @@ test("v2 requires Unreal eager tools rather than the three Tool Search meta-tool
 
 test("reviewed READ tools receive conservative read-only authority hints", () => {
   const names = [
+    CAPTURE_ASSET_IMAGE_TOOL_NAME,
+    CAPTURE_EDITOR_IMAGE_TOOL_NAME,
     CAPTURE_VIEWPORT_TOOL_NAME,
     "EditorToolset.EditorAppToolset.GetCameraTransform",
     "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools.get_blackboard",
@@ -71,7 +77,7 @@ test("field-audited material inspection tools are READ", () => {
 });
 
 test("reviewed READ manifest is exact, sorted, and duplicate-free", () => {
-  assert.equal(REVIEWED_READ_ONLY_TOOLS.length, 244);
+  assert.equal(REVIEWED_READ_ONLY_TOOLS.length, 246);
   assert.deepEqual(REVIEWED_READ_ONLY_TOOLS, [...REVIEWED_READ_ONLY_TOOLS].sort());
   assert.equal(new Set(REVIEWED_READ_ONLY_TOOLS).size, REVIEWED_READ_ONLY_TOOLS.length);
 });
@@ -217,6 +223,106 @@ test("promotes CaptureViewport PNG payloads to native MCP image content", () => 
     Width: 1
   });
   assert.equal(promoteCaptureViewportImage("Example.OtherTool", source), source);
+});
+
+test("repairs omitted CaptureViewport optionals without changing explicit values", () => {
+  const transform = {
+    translation: { x: 1, y: 2, z: 3 },
+    rotation: { x: 0, y: 0, z: 0, w: 1 },
+    scale: { x: 1, y: 1, z: 1 }
+  };
+  const annotations = {
+    showGrid: true,
+    showActorLabels: false,
+    gridSpacing: 100,
+    gridExtent: 1000,
+    groundZ: 0
+  };
+
+  assert.deepEqual(normalizeUnrealToolArguments(CAPTURE_VIEWPORT_TOOL_NAME, {}), {
+    captureTransform: null,
+    annotations: null
+  });
+  assert.deepEqual(
+    normalizeUnrealToolArguments(CAPTURE_VIEWPORT_TOOL_NAME, { captureTransform: transform }),
+    { captureTransform: transform, annotations: null }
+  );
+  assert.deepEqual(
+    normalizeUnrealToolArguments(CAPTURE_VIEWPORT_TOOL_NAME, { annotations }),
+    { captureTransform: null, annotations }
+  );
+  assert.deepEqual(
+    normalizeUnrealToolArguments(CAPTURE_VIEWPORT_TOOL_NAME, {
+      captureTransform: transform,
+      annotations,
+      bShowUI: true
+    }),
+    { captureTransform: transform, annotations, bShowUI: true }
+  );
+
+  const assetArgs = { assetPath: "/Engine/BasicShapes/Cube.Cube" };
+  assert.equal(normalizeUnrealToolArguments(CAPTURE_ASSET_IMAGE_TOOL_NAME, assetArgs), assetArgs);
+});
+
+test("promotes the UE 5.8 CaptureViewport wire shape and preserves metadata", () => {
+  const png = Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    Buffer.alloc(900_000)
+  ]).toString("base64");
+  assert.ok(png.length > 1_000_000);
+
+  const payload = {
+    returnValue: {
+      image: { mimeType: "image/png", data: png },
+      cameraLocation: { x: 10, y: 20, z: 30 },
+      cameraRotation: { pitch: 1, yaw: 2, roll: 3 },
+      cameraFOV: 90,
+      grid: null,
+      labeledActors: []
+    }
+  };
+  const source = {
+    content: [{ type: "text", text: JSON.stringify(payload) }],
+    isError: false
+  };
+
+  const promoted = promoteUnrealImageResult(CAPTURE_VIEWPORT_TOOL_NAME, source);
+  const image = promoted.content.find((item) => item.type === "image");
+  const text = promoted.content.find((item) => item.type === "text");
+  assert.deepEqual(image, { type: "image", data: png, mimeType: "image/png" });
+  assert.ok(text.text.length < 1024);
+  assert.equal(text.text.includes(png), false);
+
+  const sanitized = JSON.parse(text.text);
+  assert.equal(sanitized.returnValue.image.data, "[emitted as MCP image/png]");
+  assert.deepEqual(sanitized.returnValue.cameraLocation, { x: 10, y: 20, z: 30 });
+  assert.deepEqual(sanitized.returnValue.cameraRotation, { pitch: 1, yaw: 2, roll: 3 });
+  assert.equal(sanitized.returnValue.cameraFOV, 90);
+  assert.deepEqual(promoted.structuredContent, sanitized);
+});
+
+test("promotes top-level FToolsetImage results for editor and asset capture only", () => {
+  const png =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=";
+  for (const toolName of [CAPTURE_EDITOR_IMAGE_TOOL_NAME, CAPTURE_ASSET_IMAGE_TOOL_NAME]) {
+    const payload = { returnValue: { mimeType: "image/png", data: png } };
+    const source = { content: [{ type: "text", text: JSON.stringify(payload) }], isError: false };
+    const promoted = promoteUnrealImageResult(toolName, source);
+    assert.deepEqual(promoted.content[1], { type: "image", data: png, mimeType: "image/png" });
+    assert.equal(promoted.content[0].text.includes(png), false);
+    assert.deepEqual(promoted.structuredContent, {
+      returnValue: { mimeType: "image/png", data: "[emitted as MCP image/png]" }
+    });
+  }
+
+  const lookalike = {
+    content: [{
+      type: "text",
+      text: JSON.stringify({ returnValue: { mimeType: "image/png", data: png } })
+    }],
+    isError: false
+  };
+  assert.equal(promoteUnrealImageResult("Example.UnrelatedTool", lookalike), lookalike);
 });
 
 test("forwards Unreal tools/list_changed notifications downstream", async () => {

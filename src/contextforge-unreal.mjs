@@ -13,19 +13,27 @@ import { pathToFileURL } from "node:url";
 
 import { REVIEWED_READ_ONLY_TOOLS } from "./read-only-tools.mjs";
 
-export const ADAPTER_VERSION = "2.0.3";
+export const ADAPTER_VERSION = "2.0.4";
 export const DEFAULT_UNREAL_MCP_ENDPOINT = "http://127.0.0.1:8000/mcp";
 export const NATIVE_TOOL_SEARCH_TOOLS = Object.freeze([
   "list_toolsets",
   "describe_toolset",
   "call_tool"
 ]);
+export const CAPTURE_ASSET_IMAGE_TOOL_NAME = "EditorToolset.EditorAppToolset.CaptureAssetImage";
+export const CAPTURE_EDITOR_IMAGE_TOOL_NAME = "EditorToolset.EditorAppToolset.CaptureEditorImage";
 export const CAPTURE_VIEWPORT_TOOL_NAME = "EditorToolset.EditorAppToolset.CaptureViewport";
+export const IMAGE_CAPTURE_TOOL_NAMES = Object.freeze([
+  CAPTURE_ASSET_IMAGE_TOOL_NAME,
+  CAPTURE_EDITOR_IMAGE_TOOL_NAME,
+  CAPTURE_VIEWPORT_TOOL_NAME
+]);
 export const NIAGARA_SET_STACK_INPUT_DATA_TOOL_NAME =
   "NiagaraToolsets.NiagaraToolset_System.SetStackInputData";
-const CAPTURE_VIEWPORT_IMAGE_MARKER = "[emitted as MCP image/png]";
+const CAPTURE_IMAGE_DATA_MARKER = "[emitted as MCP image/png]";
 
 const REVIEWED_READ_ONLY_TOOL_SET = new Set(REVIEWED_READ_ONLY_TOOLS);
+const IMAGE_CAPTURE_TOOL_SET = new Set(IMAGE_CAPTURE_TOOL_NAMES);
 
 export function parseLoopbackEndpoint(value = DEFAULT_UNREAL_MCP_ENDPOINT) {
   if (typeof value !== "string" || value.length < 8 || value.length > 2048) {
@@ -133,55 +141,131 @@ export function annotateUnrealTools(tools) {
   return Array.isArray(tools) ? tools.map(annotateUnrealTool) : [];
 }
 
-export function promoteCaptureViewportImage(toolName, result) {
-  if (toolName !== CAPTURE_VIEWPORT_TOOL_NAME || !isRecord(result) || !Array.isArray(result.content)) {
+export function normalizeUnrealToolArguments(toolName, args) {
+  const source = isRecord(args) ? args : {};
+  if (toolName !== CAPTURE_VIEWPORT_TOOL_NAME) return source;
+
+  const normalized = { ...source };
+  if (!Object.prototype.hasOwnProperty.call(normalized, "captureTransform")) {
+    normalized.captureTransform = null;
+  }
+  if (!Object.prototype.hasOwnProperty.call(normalized, "annotations")) {
+    normalized.annotations = null;
+  }
+  return normalized;
+}
+
+function captureImageMatch(toolName, payload) {
+  if (!isRecord(payload)) return null;
+
+  if (toolName === CAPTURE_VIEWPORT_TOOL_NAME) {
+    const returnValue = payload.returnValue;
+    if (isRecord(returnValue) && isToolsetImage(returnValue.image)) {
+      return {
+        data: returnValue.image.data,
+        mimeType: returnValue.image.mimeType,
+        sanitized: {
+          ...payload,
+          returnValue: {
+            ...returnValue,
+            image: { ...returnValue.image, data: CAPTURE_IMAGE_DATA_MARKER }
+          }
+        }
+      };
+    }
+
+    // Preserve compatibility with UE builds that emitted the older top-level Image field.
+    if (isPngBase64(payload.Image)) {
+      return {
+        data: payload.Image,
+        mimeType: "image/png",
+        sanitized: { ...payload, Image: CAPTURE_IMAGE_DATA_MARKER }
+      };
+    }
+  }
+
+  if (
+    (toolName === CAPTURE_EDITOR_IMAGE_TOOL_NAME || toolName === CAPTURE_ASSET_IMAGE_TOOL_NAME) &&
+    isToolsetImage(payload.returnValue)
+  ) {
+    return {
+      data: payload.returnValue.data,
+      mimeType: payload.returnValue.mimeType,
+      sanitized: {
+        ...payload,
+        returnValue: { ...payload.returnValue, data: CAPTURE_IMAGE_DATA_MARKER }
+      }
+    };
+  }
+
+  return null;
+}
+
+export function promoteUnrealImageResult(toolName, result) {
+  if (
+    !IMAGE_CAPTURE_TOOL_SET.has(toolName) ||
+    !isRecord(result) ||
+    !Array.isArray(result.content) ||
+    result.isError === true
+  ) {
     return result;
   }
 
-  let imageData = null;
-  if (isRecord(result.structuredContent) && isPngBase64(result.structuredContent.Image)) {
-    imageData = result.structuredContent.Image;
-  }
-  if (imageData === null) {
-    for (const item of result.content) {
-      if (!isRecord(item) || item.type !== "text" || typeof item.text !== "string") continue;
-      const parsed = parseJsonRecord(item.text);
-      if (parsed !== null && isPngBase64(parsed.Image)) {
-        imageData = parsed.Image;
-        break;
-      }
+  let image = null;
+  let structuredContent = result.structuredContent;
+  let sanitizedTextPayload = null;
+
+  if (isRecord(structuredContent)) {
+    const match = captureImageMatch(toolName, structuredContent);
+    if (match !== null) {
+      image = { data: match.data, mimeType: match.mimeType };
+      structuredContent = match.sanitized;
     }
   }
-  if (imageData === null) return result;
 
   const content = result.content.map((item) => {
     if (!isRecord(item) || item.type !== "text" || typeof item.text !== "string") return item;
     const parsed = parseJsonRecord(item.text);
-    if (parsed === null || parsed.Image !== imageData) return item;
-    return { ...item, text: JSON.stringify({ ...parsed, Image: CAPTURE_VIEWPORT_IMAGE_MARKER }) };
+    if (parsed === null) return item;
+
+    const match = captureImageMatch(toolName, parsed);
+    if (match === null) return item;
+    if (image !== null && (image.data !== match.data || image.mimeType !== match.mimeType)) {
+      return item;
+    }
+
+    image ??= { data: match.data, mimeType: match.mimeType };
+    sanitizedTextPayload ??= match.sanitized;
+    return { ...item, text: JSON.stringify(match.sanitized) };
   });
+
+  if (image === null) return result;
+
   if (
     !content.some(
       (item) =>
         isRecord(item) &&
         item.type === "image" &&
-        item.mimeType === "image/png" &&
-        item.data === imageData
+        item.mimeType === image.mimeType &&
+        item.data === image.data
     )
   ) {
-    content.push({ type: "image", data: imageData, mimeType: "image/png" });
+    content.push({ type: "image", data: image.data, mimeType: image.mimeType });
   }
 
-  const structuredContent =
-    isRecord(result.structuredContent) && result.structuredContent.Image === imageData
-      ? { ...result.structuredContent, Image: CAPTURE_VIEWPORT_IMAGE_MARKER }
-      : result.structuredContent;
+  if (structuredContent === undefined && sanitizedTextPayload !== null) {
+    structuredContent = sanitizedTextPayload;
+  }
 
   return {
     ...result,
     content,
     ...(structuredContent === undefined ? {} : { structuredContent })
   };
+}
+
+export function promoteCaptureViewportImage(toolName, result) {
+  return promoteUnrealImageResult(toolName, result);
 }
 
 function isRecord(value) {
@@ -204,6 +288,14 @@ function isPngBase64(value) {
     value.length % 4 === 0 &&
     value.startsWith("iVBORw0KGgo") &&
     /^[A-Za-z0-9+/]+={0,2}$/.test(value)
+  );
+}
+
+function isToolsetImage(value) {
+  return (
+    isRecord(value) &&
+    value.mimeType === "image/png" &&
+    isPngBase64(value.data)
   );
 }
 
@@ -317,7 +409,7 @@ export async function startContextForgeUnreal({ endpoint = parseLoopbackEndpoint
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const toolName = request.params.name;
-    const args = request.params.arguments ?? {};
+    const args = normalizeUnrealToolArguments(toolName, request.params.arguments ?? {});
     const retrySafe = isReviewedReadOnlyTool(toolName);
 
     return await serialize(async () => {
@@ -330,7 +422,7 @@ export async function startContextForgeUnreal({ endpoint = parseLoopbackEndpoint
             }),
           { retryConnectionFailure: retrySafe }
         );
-        return promoteCaptureViewportImage(toolName, upstreamResult);
+        return promoteUnrealImageResult(toolName, upstreamResult);
       } catch (error) {
         return unrealRuntimeError(error, endpoint, toolName, retrySafe);
       }
