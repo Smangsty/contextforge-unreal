@@ -3,16 +3,40 @@
   "name": "io.github.smangsty/contextforge-unreal",
   "title": "ContextForge Unreal",
   "description": "Thin ContextForge stdio adapter for Unreal Engine's official local MCP server.",
-  "version": "2.0.4",
+  "version": "2.1.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "contextforge-unreal",
-      "version": "2.0.4",
+      "version": "2.1.0",
       "transport": {
         "type": "stdio"
       },
-      "environmentVariables": []
+      "environmentVariables": [
+        {
+          "name": "CONTEXTFORGE_UNREAL_PROJECT_ROOT",
+          "description": "Optional project root used to scope discovered Unreal Editor instances. Bind this to ContextForge's active project root when appropriate.",
+          "format": "filepath",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "CONTEXTFORGE_UNREAL_PORT_START",
+          "description": "First loopback port to inspect for Unreal Engine MCP servers.",
+          "format": "number",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "8000"
+        },
+        {
+          "name": "CONTEXTFORGE_UNREAL_PORT_END",
+          "description": "Last loopback port to inspect for Unreal Engine MCP servers. The adapter accepts at most 64 ports per range.",
+          "format": "number",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "8015"
+        }
+      ]
     }
   ]
 }

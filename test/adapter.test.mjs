@@ -6,19 +6,31 @@ import {
   CAPTURE_ASSET_IMAGE_TOOL_NAME,
   CAPTURE_EDITOR_IMAGE_TOOL_NAME,
   CAPTURE_VIEWPORT_TOOL_NAME,
+  CONTEXTFORGE_UNREAL_ROUTE_ARGUMENT,
   DEFAULT_UNREAL_MCP_ENDPOINT,
+  DEFAULT_UNREAL_MCP_PORT_END,
+  DEFAULT_UNREAL_MCP_PORT_START,
   NATIVE_TOOL_SEARCH_TOOLS,
   NIAGARA_SET_STACK_INPUT_DATA_TOOL_NAME,
+  addRoutingTargetToTool,
   annotateUnrealTool,
   annotateUnrealTools,
+  extractUnrealProjectPath,
   installToolListChangedForwarder,
   isNativeToolSearchOnly,
   isReviewedReadOnlyTool,
+  normalizeContextProjectRoot,
+  normalizeUnrealProjectPath,
   normalizeUnrealToolArguments,
   normalizeUnrealToolSchema,
   parseLoopbackEndpoint,
+  parseUnrealPortRange,
+  projectPathWithinRoot,
   promoteCaptureViewportImage,
-  promoteUnrealImageResult
+  promoteUnrealImageResult,
+  selectUnrealRoute,
+  splitUnrealRoutingArguments,
+  unrealEndpointForPort
 } from "../src/contextforge-unreal.mjs";
 import { REVIEWED_READ_ONLY_TOOLS } from "../src/read-only-tools.mjs";
 
@@ -323,6 +335,126 @@ test("promotes top-level FToolsetImage results for editor and asset capture only
     isError: false
   };
   assert.equal(promoteUnrealImageResult("Example.UnrelatedTool", lookalike), lookalike);
+});
+
+test("uses a bounded configurable multi-editor discovery range", () => {
+  assert.deepEqual(parseUnrealPortRange(), {
+    start: DEFAULT_UNREAL_MCP_PORT_START,
+    end: DEFAULT_UNREAL_MCP_PORT_END
+  });
+  assert.deepEqual(parseUnrealPortRange("8100", "8103"), { start: 8100, end: 8103 });
+  assert.equal(unrealEndpointForPort(8001).href, "http://127.0.0.1:8001/mcp");
+  assert.throws(() => parseUnrealPortRange(8100, 8099), /PORT_RANGE_INVALID/);
+  assert.throws(() => parseUnrealPortRange(8000, 8064), /PORT_RANGE_INVALID/);
+});
+
+test("extracts the current uproject only from startup commandline metadata", () => {
+  const pwf =
+    "C:\\Unreal Projects\\Pirates with Friends\\Game_PiratesWithFriends\\PiratesWithFriends.uproject";
+  const deathrey =
+    "C:\\Unreal Projects\\Pirates with Friends\\Asset_Deathrey_58\\Pirate_Deathrey_58.uproject";
+  const current =
+    `LogCsvProfiler: Display: Metadata set : commandline="" "${pwf}""`;
+  const result = {
+    content: [
+      { type: "text", text: JSON.stringify({ entries: [current, `RecentlyOpened=${deathrey}`] }) }
+    ],
+    structuredContent: { entries: [current] }
+  };
+
+  assert.equal(extractUnrealProjectPath(result), pwf);
+  assert.equal(
+    extractUnrealProjectPath({ content: [{ type: "text", text: `RecentlyOpened=${deathrey}` }] }),
+    null
+  );
+  assert.equal(normalizeUnrealProjectPath(`"${pwf}"`), pwf);
+});
+
+test("routing metadata augments schemas and is stripped before Unreal dispatch", () => {
+  const source = {
+    name: "Example.Tool",
+    inputSchema: {
+      type: "object",
+      properties: { value: { type: "number" } },
+      required: ["value"],
+      additionalProperties: false
+    }
+  };
+  const routed = addRoutingTargetToTool(source);
+  assert.equal(source.inputSchema.properties[CONTEXTFORGE_UNREAL_ROUTE_ARGUMENT], undefined);
+  assert.equal(
+    routed.inputSchema.properties[CONTEXTFORGE_UNREAL_ROUTE_ARGUMENT].required[0],
+    "projectPath"
+  );
+  assert.deepEqual(routed.inputSchema.required, ["value"]);
+  assert.equal(routed.inputSchema.additionalProperties, false);
+
+  const projectPath =
+    "C:\\Unreal Projects\\Pirates with Friends\\Game_PiratesWithFriends\\PiratesWithFriends.uproject";
+  const split = splitUnrealRoutingArguments({
+    value: 42,
+    [CONTEXTFORGE_UNREAL_ROUTE_ARGUMENT]: { projectPath, port: 8000 }
+  });
+  assert.deepEqual(split.arguments, { value: 42 });
+  assert.deepEqual(split.target, { projectPath, port: 8000 });
+  assert.throws(
+    () =>
+      splitUnrealRoutingArguments({
+        [CONTEXTFORGE_UNREAL_ROUTE_ARGUMENT]: { port: 8000 }
+      }),
+    /UNREAL_TARGET_INVALID/
+  );
+});
+
+test("routes by authoritative project identity and active project root", () => {
+  const root = "C:\\Unreal Projects\\Pirates with Friends";
+  const pwfRoot = `${root}\\Game_PiratesWithFriends`;
+  const pwf = `${pwfRoot}\\PiratesWithFriends.uproject`;
+  const deathrey = `${root}\\Asset_Deathrey_58\\Pirate_Deathrey_58.uproject`;
+  const routes = [
+    { projectPath: pwf, port: 8000 },
+    { projectPath: deathrey, port: 8001 }
+  ];
+
+  assert.equal(normalizeContextProjectRoot(pwfRoot), pwfRoot);
+  assert.equal(projectPathWithinRoot(pwf, root), true);
+  assert.equal(projectPathWithinRoot(deathrey, pwfRoot), false);
+  assert.equal(selectUnrealRoute(routes, null, pwfRoot).port, 8000);
+  assert.equal(
+    selectUnrealRoute(routes, { projectPath: deathrey, port: null }, root).port,
+    8001
+  );
+});
+
+test("multi-editor routing fails closed instead of selecting the wrong Editor", () => {
+  const root = "C:\\Unreal Projects\\Pirates with Friends";
+  const pwf = `${root}\\Game_PiratesWithFriends\\PiratesWithFriends.uproject`;
+  const deathrey = `${root}\\Asset_Deathrey_58\\Pirate_Deathrey_58.uproject`;
+  const routes = [
+    { projectPath: pwf, port: 8000 },
+    { projectPath: deathrey, port: 8001 }
+  ];
+
+  assert.throws(() => selectUnrealRoute(routes, null, root), /UNREAL_TARGET_REQUIRED/);
+  assert.throws(
+    () =>
+      selectUnrealRoute(
+        routes,
+        { projectPath: `${root}\\Missing\\Missing.uproject`, port: null },
+        root
+      ),
+    /UNREAL_TARGET_UNAVAILABLE/
+  );
+
+  const duplicate = [...routes, { projectPath: pwf, port: 8002 }];
+  assert.throws(
+    () => selectUnrealRoute(duplicate, { projectPath: pwf, port: null }, root),
+    /UNREAL_TARGET_AMBIGUOUS/
+  );
+  assert.equal(
+    selectUnrealRoute(duplicate, { projectPath: pwf, port: 8002 }, root).port,
+    8002
+  );
 });
 
 test("forwards Unreal tools/list_changed notifications downstream", async () => {

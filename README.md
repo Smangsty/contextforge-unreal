@@ -4,13 +4,13 @@ A thin third-party ContextForge adapter for Epic Games' official Unreal Engine M
 
 ## What it does
 
-Unreal Engine 5.8 exposes its official MCP server over local Streamable HTTP at:
+Unreal Engine 5.8 exposes its official MCP server over local Streamable HTTP. The first Editor normally uses:
 
 `http://127.0.0.1:8000/mcp`
 
-ContextForge Unreal bridges ContextForge's admitted stdio transport to that loopback endpoint. Version 2 exposes Unreal's native eager MCP tool catalog directly instead of wrapping it behind Tool Search.
+Additional Editors can be launched with `-ModelContextProtocolPort=N`. ContextForge Unreal v2.1 discovers a bounded loopback range, `8000-8015` by default, identifies each Editor by its actual `.uproject`, and routes calls by project identity rather than treating port 8000 as a global singleton.
 
-In the Unreal project used to validate v2, the Editor exposed 830 direct tools in one `tools/list` response. ContextForge sees those exact Unreal names, descriptions, input schemas, and output schemas.
+ContextForge still sees Unreal's native eager MCP tools directly. In the Unreal project used to validate v2, the Editor exposed 830 direct tools in one `tools/list` response. Those Unreal tool names and authority classifications are preserved. Object input schemas gain only the optional `_contextforgeUnreal` routing field, which the adapter removes before forwarding arguments to Unreal.
 
 ## Prerequisites
 
@@ -25,7 +25,7 @@ After changing **Enable Tool Search**, restart the Unreal MCP server.
 
 Unreal 5.8 eager tools currently do not provide MCP read/write annotations.
 
-ContextForge Unreal therefore carries a reviewed exact-name READ manifest in `src/read-only-tools.mjs`. The current reviewed manifest contains 244 exact Unreal 5.8 tools. Existing manually reviewed entries are retained, and new Python-backed entries are admitted only after static review of Epic's installed UE 5.8 `tool_call` implementations. Ambiguous or mutating implementations remain WRITE. Every unlisted or newly introduced Unreal tool defaults to WRITE.
+ContextForge Unreal therefore carries a reviewed exact-name READ manifest in `src/read-only-tools.mjs`. The current reviewed manifest contains 246 exact Unreal 5.8 tools. Existing manually reviewed entries are retained, and new Python-backed entries are admitted only after static review of Epic's installed UE 5.8 `tool_call` implementations. Ambiguous or mutating implementations remain WRITE. Every unlisted or newly introduced Unreal tool defaults to WRITE.
 
 This is intentionally conservative. The adapter never uses runtime naming heuristics as security authority.
 
