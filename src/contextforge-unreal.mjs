@@ -15,7 +15,7 @@ import { pathToFileURL } from "node:url";
 
 import { REVIEWED_READ_ONLY_TOOLS } from "./read-only-tools.mjs";
 
-export const ADAPTER_VERSION = "2.1.0";
+export const ADAPTER_VERSION = "2.1.1";
 export const DEFAULT_UNREAL_MCP_ENDPOINT = "http://127.0.0.1:8000/mcp";
 export const NATIVE_TOOL_SEARCH_TOOLS = Object.freeze([
   "list_toolsets",
@@ -591,6 +591,13 @@ export function installToolListChangedForwarder(client, server) {
   });
 }
 
+export function fingerprintUnrealTools(tools) {
+  const canonicalTools = [...(tools ?? [])].sort((left, right) =>
+    String(left?.name ?? "").localeCompare(String(right?.name ?? ""))
+  );
+  return createHash("sha256").update(JSON.stringify(canonicalTools)).digest("hex");
+}
+
 export async function startContextForgeUnreal({ endpoint = parseLoopbackEndpoint() } = {}) {
   const server = new Server(
     { name: "contextforge-unreal", version: ADAPTER_VERSION },
@@ -766,7 +773,7 @@ export async function startContextForgeUnrealMultiplexed({
   }
 
   function fingerprintTools(tools) {
-    return createHash("sha256").update(JSON.stringify(tools ?? [])).digest("hex");
+    return fingerprintUnrealTools(tools);
   }
 
   async function identifyProjectPath(client, tools) {
@@ -879,11 +886,21 @@ export async function startContextForgeUnrealMultiplexed({
     return eligible[0];
   }
 
-  function assertPublishedCatalog(route) {
+  async function assertPublishedCatalog(route) {
     if (
-      publishedCatalogFingerprint !== null &&
-      route.catalogFingerprint !== publishedCatalogFingerprint
+      publishedCatalogFingerprint === null ||
+      route.catalogFingerprint === publishedCatalogFingerprint
     ) {
+      return;
+    }
+
+    const page = await route.client.listTools();
+    assertEagerTools(page.tools);
+    route.initialPage = null;
+    route.tools = page.tools;
+    route.catalogFingerprint = fingerprintTools(page.tools);
+
+    if (route.catalogFingerprint !== publishedCatalogFingerprint) {
       throw new Error("UNREAL_MCP_TOOL_CATALOG_MISMATCH");
     }
   }
@@ -1016,7 +1033,7 @@ export async function startContextForgeUnrealMultiplexed({
       try {
         const routes = await discoverRoutes();
         route = selectUnrealRoute(routes, split.target, normalizedProjectRoot);
-        assertPublishedCatalog(route);
+        await assertPublishedCatalog(route);
         const upstreamResult = await route.client.callTool({
           name: toolName,
           arguments: args
@@ -1048,7 +1065,7 @@ export async function startContextForgeUnrealMultiplexed({
             retryTarget,
             normalizedProjectRoot
           );
-          assertPublishedCatalog(retryRoute);
+          await assertPublishedCatalog(retryRoute);
           const upstreamResult = await retryRoute.client.callTool({
             name: toolName,
             arguments: args

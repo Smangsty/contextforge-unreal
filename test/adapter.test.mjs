@@ -16,6 +16,7 @@ import {
   annotateUnrealTool,
   annotateUnrealTools,
   extractUnrealProjectPath,
+  fingerprintUnrealTools,
   installToolListChangedForwarder,
   isNativeToolSearchOnly,
   isReviewedReadOnlyTool,
@@ -335,6 +336,18 @@ test("promotes top-level FToolsetImage results for editor and asset capture only
     isError: false
   };
   assert.equal(promoteUnrealImageResult("Example.UnrelatedTool", lookalike), lookalike);
+});
+
+test("catalog fingerprints ignore tool order but detect real schema drift", () => {
+  const alpha = { name: "Alpha", inputSchema: { type: "object", properties: {} } };
+  const beta = { name: "Beta", inputSchema: { type: "object", properties: { value: { type: "string" } } } };
+  const changedBeta = { name: "Beta", inputSchema: { type: "object", properties: { value: { type: "number" } } } };
+
+  assert.equal(fingerprintUnrealTools([alpha, beta]), fingerprintUnrealTools([beta, alpha]));
+  assert.notEqual(
+    fingerprintUnrealTools([alpha, beta]),
+    fingerprintUnrealTools([alpha, changedBeta])
+  );
 });
 
 test("uses a bounded configurable multi-editor discovery range", () => {
