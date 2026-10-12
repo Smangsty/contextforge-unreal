@@ -1,10 +1,9 @@
-"""Register the optional ContextForge Python tools with Epic's native UE 5.8 registry."""
+"""Register optional editor-side ContextForge Python tools with Epic's ToolsetRegistry."""
 import unreal
-from toolset_registry.registration import Registration
 from contextforge_unreal_scripting import ContextForgeUnrealScripting
 
-_registration = Registration([ContextForgeUnrealScripting])
-_registration.register()
+if not unreal.ToolsetRegistry.is_toolset_class_registered(ContextForgeUnrealScripting):
+    unreal.ToolsetRegistry.register_toolset_class(ContextForgeUnrealScripting)
 
 if unreal.ToolsetRegistry.is_toolset_class_registered(ContextForgeUnrealScripting):
     unreal.log("[ContextForgeUnrealTools] Python toolset registered")
