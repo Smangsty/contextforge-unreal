@@ -91,6 +91,9 @@ namespace ContextForgeBlueprint
         if (!Blueprint) return;
         FCompilerResultsLog Log(false);
         Result.bCompileAttempted = true;
+        Result.Diagnostics.Reset();
+        Result.ErrorCount = 0;
+        Result.WarningCount = 0;
         FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::None, &Log);
         Result.ErrorCount = Log.NumErrors;
         Result.WarningCount = Log.NumWarnings;
@@ -158,6 +161,31 @@ namespace ContextForgeBlueprint
         Result.bSafeToRetryCreation = false;
     }
 
+    // Some UE components initialize editor-owned shared settings during a scoped save.
+    // Saving is opt-in, targets only this Blueprint, and always gets a real recompile.
+    static void CompleteComponent(UBlueprint* Blueprint, USCS_Node* Node,
+                                  FCFBlueprintReceipt& Result, bool bSave)
+    {
+        Result.bInitializationCompleted = Node && Node->ComponentTemplate != nullptr;
+        Compile(Blueprint, Result);
+        if (bSave && !Result.bCompileSucceeded)
+        {
+            Result.bSaveAttempted = true;
+            Result.bSaved = UEditorAssetLibrary::SaveLoadedAsset(Blueprint, true);
+            if (Result.bSaved)
+            {
+                Compile(Blueprint, Result);
+                Result.bInitializationCompleted = Node && Node->ComponentTemplate != nullptr;
+            }
+        }
+        if (bSave && Result.bSaved && Result.bCompileSucceeded)
+        {
+            // Compilation after initialization may dirty the same asset again.
+            Result.bSaved = UEditorAssetLibrary::SaveLoadedAsset(Blueprint, true);
+        }
+        Complete(Blueprint, Result, bSave && !Result.bSaveAttempted);
+    }
+
     static UEdGraph* FindGraph(UBlueprint* Blueprint, const FString& Name)
     {
         if (!Blueprint || Name.IsEmpty()) return nullptr;
@@ -209,6 +237,8 @@ namespace ContextForgeBlueprint
             for (UEdGraphPin* Pin : Node->Pins)
             {
                 if (!Pin) continue;
+                Result.PinDetails.Add(FString::Printf(TEXT("%s|%s|%s|%d"),
+                    *Guid, *Pin->PinId.ToString(), *Pin->PinName.ToString(), int32(Pin->Direction)));
                 FingerprintLines.Add(FString::Printf(TEXT("P|%s|%s|%d|%s"),
                     *Guid, *Pin->PinName.ToString(), int32(Pin->Direction), *Pin->DefaultValue));
                 if (Pin->Direction != EGPD_Output) continue;
@@ -223,12 +253,28 @@ namespace ContextForgeBlueprint
             }
         }
         Result.NodeGuids.Sort();
+        Result.PinDetails.Sort();
         Result.Connections.Sort();
         FingerprintLines.Append(Result.Connections);
         FingerprintLines.Sort();
         Result.Fingerprint = FMD5::HashAnsiString(*FString::Join(FingerprintLines, TEXT("\n")));
         Result.bSuccess = true;
         return Result;
+    }
+
+    static UEdGraphPin* FindUniquePin(UEdGraphNode* Node, const FString& Name, EEdGraphPinDirection Direction)
+    {
+        if (!Node || Name.IsEmpty()) return nullptr;
+        UEdGraphPin* Match = nullptr;
+        for (UEdGraphPin* Pin : Node->Pins)
+        {
+            if (Pin && Pin->PinName == FName(*Name) && Pin->Direction == Direction)
+            {
+                if (Match) return nullptr;
+                Match = Pin;
+            }
+        }
+        return Match;
     }
 
     static FString Edge(UEdGraphNode* Source, UEdGraphPin* SourcePin,
@@ -388,7 +434,7 @@ FCFBlueprintReceipt UContextForgeBlueprintTools::AddComponentVerified(
             }
             Result.bInitializationCompleted = Node->ComponentTemplate != nullptr;
             Result.bReadbackVerified = true;
-            ContextForgeBlueprint::Complete(Blueprint, Result, false);
+            ContextForgeBlueprint::CompleteComponent(Blueprint, Node, Result, bSave);
             return Result;
         }
     }
@@ -418,8 +464,7 @@ FCFBlueprintReceipt UContextForgeBlueprintTools::AddComponentVerified(
             break;
         }
     }
-    ContextForgeBlueprint::Compile(Blueprint, Result);
-    ContextForgeBlueprint::Complete(Blueprint, Result, bSave);
+    ContextForgeBlueprint::CompleteComponent(Blueprint, Node, Result, bSave);
     return Result;
 }
 
@@ -454,9 +499,9 @@ FCFBlueprintReceipt UContextForgeBlueprintTools::RewireGraphConnection(
     UEdGraphNode* Source = ContextForgeBlueprint::FindNode(Graph, SourceNodeGuid);
     UEdGraphNode* OldNode = ContextForgeBlueprint::FindNode(Graph, OldTargetNodeGuid);
     UEdGraphNode* NewNode = ContextForgeBlueprint::FindNode(Graph, NewTargetNodeGuid);
-    UEdGraphPin* From = Source ? Source->FindPin(FName(*SourcePin)) : nullptr;
-    UEdGraphPin* Old = OldNode ? OldNode->FindPin(FName(*OldTargetPin)) : nullptr;
-    UEdGraphPin* New = NewNode ? NewNode->FindPin(FName(*NewTargetPin)) : nullptr;
+    UEdGraphPin* From = ContextForgeBlueprint::FindUniquePin(Source, SourcePin, EGPD_Output);
+    UEdGraphPin* Old = ContextForgeBlueprint::FindUniquePin(OldNode, OldTargetPin, EGPD_Input);
+    UEdGraphPin* New = ContextForgeBlueprint::FindUniquePin(NewNode, NewTargetPin, EGPD_Input);
     if (!From || !Old || !New || From->Direction != EGPD_Output ||
         Old->Direction != EGPD_Input || New->Direction != EGPD_Input ||
         !From->LinkedTo.Contains(Old) || !New->LinkedTo.IsEmpty() ||
