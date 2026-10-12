@@ -76,6 +76,7 @@ struct FCFGraphSnapshot
     UPROPERTY() bool bSuccess = false;
     UPROPERTY() FString Error;
     UPROPERTY() TArray<FString> NodeGuids;
+    UPROPERTY() TArray<FString> PinDetails;
     UPROPERTY() TArray<FString> Connections;
     UPROPERTY() FString Fingerprint;
 };
