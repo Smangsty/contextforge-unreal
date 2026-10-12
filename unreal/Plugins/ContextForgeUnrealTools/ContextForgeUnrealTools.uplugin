@@ -1,13 +1,13 @@
 {
   "FileVersion": 3,
-  "Version": 1,
-  "VersionName": "0.1.0",
+  "Version": 20300,
+  "VersionName": "2.3.0",
   "FriendlyName": "ContextForge Unreal Authoring Tools",
-  "Description": "Optional editor-only UE 5.8 authoring, diagnostic, scripting and PIE toolsets for the official Unreal MCP registry.",
+  "Description": "Engine-wide UE 5.8 editor authoring, diagnostics and PIE toolsets for Epic's official Unreal MCP registry.",
   "Category": "Editor",
   "CanContainContent": true,
-  "Installed": false,
-  "EnabledByDefault": false,
+  "Installed": true,
+  "EnabledByDefault": true,
   "Modules": [
     {
       "Name": "ContextForgeUnrealTools",

@@ -1,6 +1,8 @@
 """Disposable UE 5.8 ContextForgeUnrealTools integration smoke.
 
-Requires a throwaway CFSmoke.uproject with the companion plugin installed.
+Requires a disposable CFSmoke.uproject with ContextForgeUnrealTools loaded.
+The full-trust Python portion also requires launching the editor with
+CONTEXTFORGE_UNREAL_ENABLE_FULL_TRUST_PYTHON=1, an explicit opt-in.
 This script creates no production assets and saves no Blueprint or map.
 Look for CF_SMOKE ALL_TESTS_PASSED in Saved/Logs/CFSmoke.log.
 """
