@@ -90,9 +90,24 @@ test("field-audited material inspection tools are READ", () => {
 });
 
 test("reviewed READ manifest is exact, sorted, and duplicate-free", () => {
-  assert.equal(REVIEWED_READ_ONLY_TOOLS.length, 246);
+  assert.equal(REVIEWED_READ_ONLY_TOOLS.length, 248);
   assert.deepEqual(REVIEWED_READ_ONLY_TOOLS, [...REVIEWED_READ_ONLY_TOOLS].sort());
   assert.equal(new Set(REVIEWED_READ_ONLY_TOOLS).size, REVIEWED_READ_ONLY_TOOLS.length);
+});
+
+test("UE 5.8 Python source audit keeps transient graph mutations gated", () => {
+  const pureReads = [
+    "editor_toolset.toolsets.programmatic.ProgrammaticToolset.get_execution_environment",
+    "editor_toolset.toolsets.blueprint.BlueprintTools.get_node_infos"
+  ];
+  const writes = [
+    // Instantiates a temporary graph node before removing it.
+    "editor_toolset.toolsets.blueprint.BlueprintTools.get_node_type_pins",
+    // The engine macro cache creates and removes graph nodes on first use.
+    "editor_toolset.toolsets.blueprint.BlueprintTools.find_node_categories"
+  ];
+  for (const name of pureReads) assert.equal(isReviewedReadOnlyTool(name), true, name);
+  for (const name of writes) assert.equal(isReviewedReadOnlyTool(name), false, name);
 });
 
 test("ambiguous or mutating getter-shaped tools remain WRITE", () => {

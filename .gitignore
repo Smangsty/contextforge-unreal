@@ -1,3 +1,6 @@
 node_modules/
 *.tgz
 .DS_Store
+
+# Created by UE BuildPlugin during packaging, not source-controlled.
+unreal/Plugins/ContextForgeUnrealTools/Config/FilterPlugin.ini

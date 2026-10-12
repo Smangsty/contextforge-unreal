@@ -19572,6 +19572,7 @@ var REVIEWED_READ_ONLY_TOOLS = Object.freeze([
   "editor_toolset.toolsets.blueprint.BlueprintTools.get_default_object",
   "editor_toolset.toolsets.blueprint.BlueprintTools.get_graph",
   "editor_toolset.toolsets.blueprint.BlueprintTools.get_graph_dsl_docs",
+  "editor_toolset.toolsets.blueprint.BlueprintTools.get_node_infos",
   "editor_toolset.toolsets.blueprint.BlueprintTools.get_parent",
   "editor_toolset.toolsets.blueprint.BlueprintTools.get_pin_value",
   "editor_toolset.toolsets.blueprint.BlueprintTools.get_variable_category",
@@ -19606,6 +19607,7 @@ var REVIEWED_READ_ONLY_TOOLS = Object.freeze([
   "editor_toolset.toolsets.object.ObjectTools.get_properties",
   "editor_toolset.toolsets.object.ObjectTools.list_properties",
   "editor_toolset.toolsets.object.ObjectTools.search_subclasses",
+  "editor_toolset.toolsets.programmatic.ProgrammaticToolset.get_execution_environment",
   "editor_toolset.toolsets.scene.SceneTools.find_actors",
   "editor_toolset.toolsets.scene.SceneTools.get_actors_in_folder",
   "editor_toolset.toolsets.scene.SceneTools.get_collision_channels",
@@ -19652,7 +19654,7 @@ var REVIEWED_READ_ONLY_TOOLS = Object.freeze([
 ]);
 
 // src/contextforge-unreal.mjs
-var ADAPTER_VERSION = "2.1.1";
+var ADAPTER_VERSION = "2.2.0";
 var DEFAULT_UNREAL_MCP_ENDPOINT = "http://127.0.0.1:8000/mcp";
 var NATIVE_TOOL_SEARCH_TOOLS = Object.freeze([
   "list_toolsets",
