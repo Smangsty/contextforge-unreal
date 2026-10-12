@@ -15,14 +15,14 @@
 #include "Logging/TokenizedMessage.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
-#include "Misc/ScopedTransaction.h"
+#include "ScopedTransaction.h"
 #include "Misc/SecureHash.h"
 
 namespace ContextForgeBlueprint
 {
     static FString CurrentProject()
     {
-        return FPaths::GetProjectFilePath();
+        return FPaths::ConvertRelativePathToFull(FPaths::GetProjectFilePath());
     }
 
     static FString AssetObjectPath(const FString& Path)
@@ -107,14 +107,9 @@ namespace ContextForgeBlueprint
             case EMessageSeverity::Warning: Diagnostic.Severity = TEXT("warning"); break;
             default: Diagnostic.Severity = TEXT("info"); break;
             }
-            TArray<UEdGraphNode*> MentionedNodes;
-            FCompilerResultsLog::GetNodesFromTokens(Message->GetMessageTokens(), MentionedNodes);
-            if (!MentionedNodes.IsEmpty() && MentionedNodes[0])
-            {
-                Diagnostic.NodeGuid = MentionedNodes[0]->NodeGuid.ToString();
-                const UEdGraph* Graph = MentionedNodes[0]->GetGraph();
-                Diagnostic.Graph = Graph ? Graph->GetName() : FString();
-            }
+            // GetNodesFromTokens is private in UE 5.8. Preserve the exact
+            // compiler message rather than inventing a node or graph identity.
+            // Graph and node fields remain empty unless a public API proves them.
             Result.Diagnostics.Add(MoveTemp(Diagnostic));
         }
         Result.bCompileSucceeded =

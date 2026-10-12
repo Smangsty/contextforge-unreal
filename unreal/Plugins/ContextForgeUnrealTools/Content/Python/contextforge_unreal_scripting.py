@@ -44,19 +44,21 @@ def _receipt(success, attempted, project, stdout="", stderr="", exception=""):
     out, out_cut = _bounded(stdout)
     err, err_cut = _bounded(stderr)
     exc, exc_cut = _bounded(exception)
-    return ContextForgePythonReceipt(
-        success=success,
-        attempted=attempted,
-        project_path=project,
-        stdout=out,
-        stderr=err,
-        exception=exc,
-        output_truncated=out_cut or err_cut or exc_cut,
-    )
+    # UE 5.8 dynamic @ustruct constructors silently ignore keyword values.
+    # Set each UPROPERTY explicitly or every receipt falsely reports defaults.
+    receipt = ContextForgePythonReceipt()
+    receipt.success = bool(success)
+    receipt.attempted = bool(attempted)
+    receipt.project_path = project
+    receipt.stdout = out
+    receipt.stderr = err
+    receipt.exception = exc
+    receipt.output_truncated = out_cut or err_cut or exc_cut
+    return receipt
 
 
 def _run_script(code: str, expected_project_path: str):
-    project = str(unreal.Paths.get_project_file_path() or "")
+    project = str(unreal.Paths.convert_relative_path_to_full(unreal.Paths.get_project_file_path()) or "")
     if not _project_key(project) or not _project_key(expected_project_path):
         return _receipt(False, False, project, exception="PROJECT_PATH_UNAVAILABLE_OR_INVALID")
     if _project_key(project) != _project_key(expected_project_path):

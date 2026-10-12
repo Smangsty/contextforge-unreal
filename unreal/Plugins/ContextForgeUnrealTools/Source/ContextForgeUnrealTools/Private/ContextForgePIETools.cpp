@@ -60,7 +60,7 @@ namespace ContextForgePIE
 
     static FString Project()
     {
-        return FPaths::GetProjectFilePath();
+        return FPaths::ConvertRelativePathToFull(FPaths::GetProjectFilePath());
     }
 
     static UWorld* EditorWorld()
@@ -322,9 +322,18 @@ FCFPIETestReceipt UContextForgePIETools::StopPIE()
         return ContextForgePIE::Receipt(TEXT("EDITOR_UNAVAILABLE"),
             TEXT("Cannot request PIE stop without an editor engine."));
     }
-    if (GEditor->IsPlayingSessionInEditor() && !ContextForgePIE::bEndRequested)
+    if (!ContextForgePIE::bEndRequested)
     {
-        GEditor->RequestEndPlayMap();
+        // A queued PIE request is not yet an active session. Cancel it instead
+        // of leaving a pending launch alive after a stop receipt.
+        if (GEditor->GetPlaySessionRequest().IsSet())
+        {
+            GEditor->CancelRequestPlaySession();
+        }
+        else if (GEditor->IsPlayingSessionInEditor())
+        {
+            GEditor->RequestEndPlayMap();
+        }
     }
     ContextForgePIE::bEndRequested = true;
     return ContextForgePIE::Receipt(TEXT("STOP_REQUESTED"),
