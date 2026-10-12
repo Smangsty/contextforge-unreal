@@ -1,13 +1,15 @@
 {
   "name": "contextforge-unreal",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Thin ContextForge stdio adapter for Unreal Engine's official local MCP server.",
   "type": "module",
   "bin": {
-    "contextforge-unreal": "bin/contextforge-unreal.mjs"
+    "contextforge-unreal": "bin/contextforge-unreal.mjs",
+    "contextforge-unreal-plugin": "bin/contextforge-unreal-plugin.mjs"
   },
   "files": [
     "bin",
+    "scripts/engine-plugin.mjs",
     "server.json",
     "unreal/README.md",
     "unreal/Plugins/ContextForgeUnrealTools/ContextForgeUnrealTools.uplugin",

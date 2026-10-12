@@ -5,7 +5,7 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 const read = (relativePath) => readFileSync(new URL(relativePath, root), "utf8");
 
-test("optional UE 5.8 plugin is included in the npm package", () => {
+test("engine-wide UE 5.8 plugin is included in the npm package", () => {
   const pkg = JSON.parse(read("package.json"));
   const descriptor = JSON.parse(
     read("unreal/Plugins/ContextForgeUnrealTools/ContextForgeUnrealTools.uplugin")
@@ -16,7 +16,11 @@ test("optional UE 5.8 plugin is included in the npm package", () => {
   assert.ok(packagedPluginPaths.includes("unreal/Plugins/ContextForgeUnrealTools/Content/Python"), "npm distribution must carry Python source");
   assert.equal(packagedPluginPaths.some(path => path.includes("/Config/") || path.includes("/Binaries") || path.includes("/Intermediate")), false, "exclude generated and binary directories");
   assert.equal(descriptor.Modules[0].Type, "Editor", "plugin must remain editor-only");
-  assert.equal(descriptor.EnabledByDefault, false, "never silently install into production");
+  assert.equal(descriptor.EnabledByDefault, true, "engine install must enable all UE 5.8 projects by default");
+  assert.equal(descriptor.Installed, true, "engine plugin must be marked installed");
+  assert.equal(descriptor.VersionName, pkg.version, "plugin and adapter use one version");
+  assert.equal(pkg.bin["contextforge-unreal-plugin"], "bin/contextforge-unreal-plugin.mjs");
+  assert.ok(pkg.files.includes("scripts/engine-plugin.mjs"), "the management CLI must ship with the adapter");
   for (const dependency of ["ToolsetRegistry", "ModelContextProtocol", "PythonScriptPlugin"]) {
     assert.ok(descriptor.Plugins.some(item => item.Name === dependency && item.Enabled === true));
   }

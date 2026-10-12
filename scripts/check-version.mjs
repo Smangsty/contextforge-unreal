@@ -3,6 +3,10 @@ import { readFile } from "node:fs/promises";
 const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 const packageLock = JSON.parse(await readFile(new URL("../package-lock.json", import.meta.url), "utf8"));
 const serverJson = JSON.parse(await readFile(new URL("../server.json", import.meta.url), "utf8"));
+const nativePlugin = JSON.parse(await readFile(
+  new URL("../unreal/Plugins/ContextForgeUnrealTools/ContextForgeUnrealTools.uplugin", import.meta.url),
+  "utf8"
+));
 const adapterSource = await readFile(
   new URL("../src/contextforge-unreal.mjs", import.meta.url),
   "utf8"
@@ -27,6 +31,11 @@ if (
   packageLock.version !== packageJson.version ||
   lockRootVersion !== packageJson.version ||
   adapterVersionMatch !== packageJson.version ||
+  nativePlugin.VersionName !== packageJson.version ||
+  nativePlugin.Installed !== true ||
+  nativePlugin.EnabledByDefault !== true ||
+  packageJson.bin?.["contextforge-unreal-plugin"] !== "bin/contextforge-unreal-plugin.mjs" ||
+  !packageJson.files?.includes("scripts/engine-plugin.mjs") ||
   matchingPackages.length !== 1 ||
   runtimeDependencies.length !== 0
 ) {

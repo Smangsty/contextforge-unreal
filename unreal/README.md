@@ -1,48 +1,69 @@
-# Optional Unreal Engine 5.8 Authoring Toolsets
+# Engine-wide ContextForge Unreal 5.8 authoring plugin
 
-The `ContextForgeUnrealTools` companion plugin extends Epic's **official Unreal Model Context Protocol and ToolsetRegistry**. It does not implement a second MCP transport, replace Epic's toolsets, or change ContextForge's project routing and approval rules.
+ContextForgeUnrealTools is an editor extension shipped **inside the same npm package and release as contextforge-unreal**. It extends Epic's official Model Context Protocol and ToolsetRegistry. It is not another MCP server. Both components share the adapter's version.
 
-The Node adapter remains a thin per-`.uproject` broker. Installing this optional editor-only plugin adds the following native tools to the same Unreal Editor MCP catalog:
+Installing it once in an Unreal Engine installation makes its tools available to every project using that installation, unless a project explicitly disables the plugin. No per-project plugin folder or .uproject edit is needed.
 
-| Toolset | Tool | Actual behavior |
+The implementation was previously smoke-tested against Unreal 5.8.3 on Win64. The installer rejects other minor versions until their API compatibility is validated.
+
+## Installation and updates
+
+First install/update the contextforge-unreal package through normal ContextForge Discovery review. That same package includes a contextforge-unreal-plugin command for status, preparation, installation, update, and removal.
+
+Run via **the approved ContextForge Command capability** or a trusted terminal on Windows:
+
+    node <package-root>\bin\contextforge-unreal-plugin.mjs status --engine-root "C:\Program Files\Epic Games\UE_5.8"
+    node <package-root>\bin\contextforge-unreal-plugin.mjs prepare --engine-root "C:\Program Files\Epic Games\UE_5.8" --output-root "C:\keel-contextforge\.build\ue-engine-plugin"
+    node <package-root>\bin\contextforge-unreal-plugin.mjs install --engine-root "C:\Program Files\Epic Games\UE_5.8" --prepared-dir "C:\keel-contextforge\.build\ue-engine-plugin\ContextForgeUnrealTools"
+
+Or omit --prepared-dir from install to build and install in one step. Agent-driven, approval-gated updates use the same package and CLI, rather than requiring users to move folders into each project. Updating the adapter alone **never silently modifies the engine**.
+
+**Prepare** invokes Unreal's RunUAT.bat BuildPlugin against the exact selected engine to produce a Win64 editor plugin. It does not change engine installation files or any project. A Windows C++ build toolchain is necessary.
+
+**Install** validates the adapter/plugin version, the exact Engine/Build/Build.version identity, compiled DLL, and the prepared package's checksums, then stages it at:
+
+    <Engine Root>\Engine\Plugins\Marketplace\ContextForgeUnrealTools
+
+The manager creates a sibling staging folder, temporarily backs up the previous **managed** plugin, verifies the replacement, and attempts rollback on failure. Unknown/unmanaged installations are never overwritten or removed. Running editors of the targeted engine block install, update and removal. Engine files under Program Files may require administrative privileges, but the manager never auto-elevates. Close that engine's editors and restart after installation.
+
+To remove the managed plugin, once relevant editors are closed:
+
+    node <package-root>\bin\contextforge-unreal-plugin.mjs uninstall --engine-root "C:\Program Files\Epic Games\UE_5.8"
+
+After launching Unreal, verify the ContextForgeBlueprintTools native methods appear in the UE MCP catalog and re-inspect the updated ContextForge capability. Mere discovery does not grant permission to invoke new tool identities.
+
+## Native operations
+
+| Toolset | Tool | Behavior |
 |---|---|---|
-| ContextForgeBlueprintTools | ListInterfaces | Read direct and inherited native or Blueprint interfaces |
-| ContextForgeBlueprintTools | AddInterface | Idempotent interface attachment with compilation and verification |
-| ContextForgeBlueprintTools | RemoveInterface | Reject inherited removals; preserve implementations by default; gate destructive removal |
-| ContextForgeBlueprintTools | CompileWithDiagnostics | Capture compiler messages, counts, outcome and optional node details |
-| ContextForgeBlueprintTools | AddComponentVerified | SCS component addition, initialization, partial-success receipt, safe retry protection |
-| ContextForgeBlueprintTools | GetGraphSnapshot | Stable node/pin/link inspection and graph fingerprint |
-| ContextForgeBlueprintTools | RewireGraphConnection | Targeted, optimistic-concurrency-guarded link replacement and unrelated-link verification |
-| ContextForgePIETools | StartPIE | Request a bounded local play test on an explicitly loaded, clean map |
-| ContextForgePIETools | VerifyPIE | Inspect actual PIE peers, possession, expected classes, roles and component presence |
-| ContextForgePIETools | StopPIE | Cancel a queued launch or request the owned play session to end |
-| ContextForgePIETools | VerifyRestoration | Verify all PIE worlds stopped and the original map remains loaded |
-| ContextForgeUnrealScripting | execute_python | Run explicitly approved, full-trust Python and return real stdout, stderr, traceback and project identity |
+| ContextForgeBlueprintTools | ListInterfaces | Lists direct and inherited native/Blueprint interfaces |
+| ContextForgeBlueprintTools | AddInterface | Adds an interface idempotently, compiles and checks the result |
+| ContextForgeBlueprintTools | RemoveInterface | Refuses inherited removal and gates destructive removal |
+| ContextForgeBlueprintTools | CompileWithDiagnostics | Reports actual compile warnings/errors and status |
+| ContextForgeBlueprintTools | AddComponentVerified | Adds a Blueprint SCS component with compilation/readback |
+| ContextForgeBlueprintTools | GetGraphSnapshot | Inspects stable nodes, pins and graph fingerprint |
+| ContextForgeBlueprintTools | RewireGraphConnection | Precondition-guarded targeted rewiring preserving unrelated links |
+| ContextForgePIETools | StartPIE | Requests bounded PIE on an expected clean map |
+| ContextForgePIETools | VerifyPIE | Inspects local peers, possession, roles and expected classes |
+| ContextForgePIETools | StopPIE | Cancels/stops only an owned PIE session |
+| ContextForgePIETools | VerifyRestoration | Checks all PIE worlds ended and the original map remains |
+| ContextForgeUnrealScripting | execute_python | Explicit opt-in full-trust Python, with project checks and execution receipts |
 
-**Important:** Tool dispatch or successful PIE launch is never proof of test success. `StartPIE` returns `REQUESTED`; only `VerifyPIE` can return an evidence-backed `PASS`. Stop completion is similarly proved by `VerifyRestoration`.
+Interface add/list/remove uses the proven UE 5.8 C++ BlueprintEditorUtils operations, not Slate clicks. A transport-successful tool call does not prove that a mutation compiled, saved or verified: inspect its structured receipt. Never blindly retry a partially applied write.
 
-## Install into a UE 5.8 project
+## Full-trust Python is off by default
 
-1. Copy the whole `unreal/Plugins/ContextForgeUnrealTools` directory into the selected Unreal project's `Plugins/ContextForgeUnrealTools` directory. Keep the C++ source, `.uplugin`, and `Content/Python` files together.
-2. Enable `ContextForgeUnrealTools` in the Unreal Editor and its dependencies: **Model Context Protocol**, **ToolsetRegistry**, **Python Script Plugin**, and **Editor Scripting Utilities**. Keep Epic's official toolsets enabled for their existing operations.
-3. Compile the plugin with the project's Unreal 5.8 toolchain and restart that Editor. The companion plugin requires UE 5.8 APIs and has only been compiled against UE **5.8.3 on Win64**.
-4. Verify the editor log contains the native `ContextForgeBlueprintTools`, `ContextForgePIETools` and Python toolset registration entries. If Unreal MCP was already running, execute `ModelContextProtocol.RefreshTools` and refresh/re-inspect the ContextForge capability catalog.
-5. Approve the **new exact tool identity/revision** through ContextForge's ordinary admission and authorization process. Enabling a plugin or seeing its tools is not authority to invoke them. In particular, `execute_python` is a full-trust **WRITE** operation.
+An engine-wide auto-enabled plugin could otherwise expose arbitrary Python execution through the UE MCP server in every project. The full-trust execute_python tool does **not register by default**. Opt in explicitly by launching that trusted editor process with:
 
-The Node npm package contains **source** for the UE companion plugin, not an engine-independent DLL. Nothing installs or enables the plugin in your production projects automatically. Existing adapter discovery, direct tool naming, routed `_contextforgeUnreal` metadata, and approvals remain in effect.
+    CONTEXTFORGE_UNREAL_ENABLE_FULL_TRUST_PYTHON=1
 
-## Safety and receipts
+This setting is not a sandbox or authorization bypass. ContextForge must still classify the tool as WRITE and enforce its approval process. The native Blueprint and PIE tools do not require this opt-in.
 
-Blueprint write operations preflight the exact `/Game/` target, isolate mutations, compile and verify readback. Optional save applies only to the requested loaded Blueprint. The normal `AssetTools.save_assets` empty-array behavior (save all dirty assets) is **never** used. Mutations that were applied before compilation fails are explicitly reported. Do not blindly retry a partly completed mutation.
+## Verification and boundaries
 
-The graph editor requires a fresh fingerprint, explicit stable node GUIDs and pin names, and refuses link changes that would silently remove unrelated connections. Compiler diagnostics report actual tokenized messages. Node/graph fields stay empty where the UE 5.8 public compiler API does not provide reliable ownership. Warnings-as-errors is an available compile flag.
-
-Python is **not a sandbox** and has no guaranteed in-progress cancellation or timeout on the UE editor game thread. Only the code and exact project identity approved for that WRITE request may run. Execution output and exceptions are capped in the receipt; a transport success does not mean code success.
-
-PIE is intended for disposable test maps. It refuses a dirty or mismatched map or a previously active PIE session. No production map, GameMode, startup map or unrelated package is switched or saved. `VerifyPIE` reads observed local actors and roles; the caller must explicitly provide expected controller/pawn classes. For multi-client authority/prediction tests, add project-specific assertions to validate the actual gameplay protocol. Do not interpret world count alone as a gameplay PASS.
-
-## Developer verification
-
-The repo's `test/ue58-smoke.py` provides a **disposable-project-only** live smoke script. It guards the project filename and creates transient Blueprint fixtures under `/Game/CFProbe`. Run it through the Unreal 5.8 headless editor against a separately created `CFSmoke.uproject` with the plugin installed. Inspect the `CF_SMOKE ALL_TESTS_PASSED` marker in the editor log; a headless editor process exit code of zero can still conceal script assertion failures.
-
-The native source was compiled using `RunUAT.bat BuildPlugin` against UE 5.8.3 Win64. Single-player and multi-client PIE behaviors must also be exercised in a graphical editor before claiming full gameplay E2E coverage. 
+- The plugin is editor-only and preserves Epic's official MCP server, transport and direct tool schemas.
+- Prebuilt binaries match **one exact Unreal Engine build**. Rebuild after engine updates or for another installation.
+- Tool changes are discoverable through the adapter's existing native MCP tool-list refresh.
+- StartPIE returns only REQUESTED; VerifyPIE and project-specific assertions are required for actual gameplay validation. VerifyRestoration proves the test session ended.
+- The regression suite includes a disposable CFSmoke.uproject fixture and test/ue58-smoke.py. Only the marker CF_SMOKE ALL_TESTS_PASSED from the editor log is accepted as native smoke success. Graphical multiplayer gameplay testing remains separate.
+- If a deployment is interrupted, inspect status and any retained .ContextForgeUnrealTools.backup-* folder before repair. Do not delete unknown engine files.

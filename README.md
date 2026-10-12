@@ -2,7 +2,7 @@
 
 A thin third-party ContextForge adapter for Epic Games' official Unreal Engine MCP server.
 
-Version 2.2 also ships an **optional UE 5.8 editor-only companion plugin** for verified Blueprint interface management, compiler diagnostics, idempotent components, targeted graph edits, controlled Python execution, and PIE/multiplayer assertions. It extends Epic's official ToolsetRegistry rather than replacing the transport. The plugin **does not install automatically** and needs explicit approval through ContextForge when admitted. See [companion install and verification](unreal/README.md).
+Version 2.3 ships a **managed UE 5.8 engine-wide editor plugin** for Blueprint interface add/list/remove, compiler diagnostics, verified components, targeted graph edits and PIE assertions. It extends Epic's official ToolsetRegistry, without introducing a second MCP server. The adapter and plugin use one version and one npm release. Install once per compatible Unreal Engine build, not once per project. See [engine-wide deployment](unreal/README.md).
 
 ## What it does
 
@@ -10,9 +10,13 @@ Unreal Engine 5.8 exposes its official MCP server over local Streamable HTTP. Th
 
 `http://127.0.0.1:8000/mcp`
 
-Additional Editors can be launched with `-ModelContextProtocolPort=N`. ContextForge Unreal v2.2 discovers a bounded loopback range, `8000-8015` by default, identifies each Editor by its actual `.uproject`, and routes calls by project identity rather than treating port 8000 as a global singleton.
+Additional Editors can be launched with `-ModelContextProtocolPort=N`. ContextForge Unreal v2.3 discovers a bounded loopback range, `8000-8015` by default, identifies each Editor by its actual `.uproject`, and routes calls by project identity rather than treating port 8000 as a global singleton.
 
 ContextForge still sees Unreal's native eager MCP tools directly. In the Unreal project used to validate v2, the Editor exposed 830 direct tools in one `tools/list` response. Those Unreal tool names and authority classifications are preserved. Object input schemas gain only the optional `_contextforgeUnreal` routing field, which the adapter removes before forwarding arguments to Unreal.
+
+## Engine-wide plugin installation
+
+The same npm distribution includes `contextforge-unreal-plugin`, an explicitly invoked manager for build, status, install/update, and uninstall. There is **no automatic engine mutation** when the adapter launches or updates. ContextForge can invoke the manager through its approved Command capability during setup and future updates. The manager installs a UE-build-specific compiled plugin in `Engine/Plugins/Marketplace/ContextForgeUnrealTools`, never into a project. See [installation and safety rules](unreal/README.md).
 
 ## Prerequisites
 
