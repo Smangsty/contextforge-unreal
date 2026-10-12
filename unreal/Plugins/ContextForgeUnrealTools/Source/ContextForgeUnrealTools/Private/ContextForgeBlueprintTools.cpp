@@ -162,7 +162,7 @@ namespace ContextForgeBlueprint
     {
         if (!Blueprint || Name.IsEmpty()) return nullptr;
         TArray<UEdGraph*> Graphs;
-        FBlueprintEditorUtils::GetAllGraphs(Blueprint, Graphs);
+        Blueprint->GetAllGraphs(Graphs);
         UEdGraph* Found = nullptr;
         for (UEdGraph* Graph : Graphs)
         {
@@ -381,7 +381,7 @@ FCFBlueprintReceipt UContextForgeBlueprintTools::AddComponentVerified(
     {
         if (Node && Node->GetVariableName() == RequestedName)
         {
-            if (Node->GetComponentClass() != Class)
+            if (Node->ComponentClass.Get() != Class)
             {
                 Result.Outcome = TEXT("COMPONENT_NAME_CONFLICT");
                 return Result;
@@ -412,7 +412,7 @@ FCFBlueprintReceipt UContextForgeBlueprintTools::AddComponentVerified(
     for (USCS_Node* Candidate : SCS->GetAllNodes())
     {
         if (Candidate && Candidate->GetVariableName() == RequestedName &&
-            Candidate->GetComponentClass() == Class)
+            Candidate->ComponentClass.Get() == Class)
         {
             Result.bReadbackVerified = true;
             break;
@@ -466,7 +466,12 @@ FCFBlueprintReceipt UContextForgeBlueprintTools::RewireGraphConnection(
         return Result;
     }
     const FPinConnectionResponse Response = Graph->GetSchema()->CanCreateConnection(From, New);
-    if (Response.Response != CONNECT_RESPONSE_MAKE)
+    // A single-link output may legitimately need its existing link broken.
+    // Only permit BREAK_OTHERS when the sole affected link is the reviewed old edge.
+    const bool bOnlyOldLink = From->LinkedTo.Num() == 1 && From->LinkedTo[0] == Old;
+    if (Response.Response != CONNECT_RESPONSE_MAKE &&
+        !(bOnlyOldLink && (Response.Response == CONNECT_RESPONSE_BREAK_OTHERS_A ||
+                           Response.Response == CONNECT_RESPONSE_BREAK_OTHERS_B)))
     {
         Result.Outcome = TEXT("CONNECTION_WOULD_AFFECT_OTHER_LINKS");
         return Result;
