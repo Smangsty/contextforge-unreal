@@ -84,12 +84,18 @@ try:
     must(invalid.outcome == "INVALID_INTERFACE",
          "invalid interface rejected without mutation")
 
+    abstract = native.add_component_verified(
+        bp_path, "/Script/Engine.ActorComponent", "CFAbstractComponent", False)
+    must(abstract.outcome == "ABSTRACT_COMPONENT_CLASS" and
+         not abstract.mutation_attempted and not abstract.mutation_applied and
+         not abstract.compile_attempted,
+         "abstract component rejected before Unreal SCS allocation")
     component = native.add_component_verified(
-        bp_path, "/Script/Engine.ActorComponent", "CFProbeComponent", False)
+        bp_path, "/Script/Engine.BoxComponent", "CFProbeComponent", False)
     must(component.mutation_applied and component.readback_verified and
-         component.compile_attempted, "component created, compiled and read back")
+         component.compile_attempted, "concrete component created, compiled and read back")
     again = native.add_component_verified(
-        bp_path, "/Script/Engine.ActorComponent", "CFProbeComponent", False)
+        bp_path, "/Script/Engine.BoxComponent", "CFProbeComponent", False)
     must(not again.mutation_applied and again.readback_verified,
          "component addition idempotent")
     compile_receipt = native.compile_with_diagnostics(bp_path, False)

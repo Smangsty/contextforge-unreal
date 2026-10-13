@@ -416,6 +416,12 @@ FCFBlueprintReceipt UContextForgeBlueprintTools::AddComponentVerified(
         Result.Outcome = TEXT("INVALID_COMPONENT_PREFLIGHT");
         return Result;
     }
+    if (Class->HasAnyClassFlags(CLASS_Abstract))
+    {
+        Result.Outcome = TEXT("ABSTRACT_COMPONENT_CLASS");
+        Result.Detail = TEXT("The requested ActorComponent class is abstract and cannot be instantiated.");
+        return Result;
+    }
 
     const FName RequestedName(*ComponentName);
     for (USCS_Node* Node : SCS->GetAllNodes())

@@ -9,6 +9,9 @@
 #include "GameFramework/Pawn.h"
 #include "Misc/OutputDevice.h"
 #include "Misc/Paths.h"
+#if WITH_DEV_AUTOMATION_TESTS
+#include "Misc/AutomationTest.h"
+#endif
 #include "Misc/ScopeLock.h"
 #include "PlayInEditorDataTypes.h"
 #include "Settings/LevelEditorPlaySettings.h"
@@ -24,28 +27,42 @@ namespace ContextForgePIE
         virtual void Serialize(const TCHAR* Text, ELogVerbosity::Type Verbosity,
                                const FName& Category) override
         {
-            if (Verbosity > ELogVerbosity::Warning) return;
+            // Strip Unreal output-device flags before classifying severity.
+            const ELogVerbosity::Type Level = static_cast<ELogVerbosity::Type>(
+                Verbosity & ELogVerbosity::VerbosityMask);
+            if (Level != ELogVerbosity::Fatal &&
+                Level != ELogVerbosity::Error &&
+                Level != ELogVerbosity::Warning) return;
             FScopeLock Lock(&Mutex);
-            if (Lines.Num() >= 100) Lines.RemoveAt(0);
-            FString Line = Category.ToString() + TEXT(": ") + FString(Text);
-            Lines.Add(Line.Left(2048));
+            TArray<FString>& Target = Level == ELogVerbosity::Warning ? Warnings : ErrorLines;
+            if (Target.Num() >= 100) Target.RemoveAt(0);
+            const FString Line = Category.ToString() + TEXT(": ") + FString(Text);
+            Target.Add(Line.Left(2048));
         }
 
         void Reset()
         {
             FScopeLock Lock(&Mutex);
-            Lines.Reset();
+            ErrorLines.Reset();
+            Warnings.Reset();
         }
 
-        TArray<FString> Get() const
+        TArray<FString> GetErrors() const
         {
             FScopeLock Lock(&Mutex);
-            return Lines;
+            return ErrorLines;
+        }
+
+        TArray<FString> GetWarnings() const
+        {
+            FScopeLock Lock(&Mutex);
+            return Warnings;
         }
 
     private:
         mutable FCriticalSection Mutex;
-        TArray<FString> Lines;
+        TArray<FString> ErrorLines;
+        TArray<FString> Warnings;
     };
 
     static FSessionErrors Errors;
@@ -124,7 +141,11 @@ namespace ContextForgePIE
         Result.bEndRequested = bEndRequested;
         Result.RequestedClients = ExpectedWorlds;
         Result.ObservedPIEWorlds = PIEWorldCount();
-        if (bLogging) Result.SessionErrors = Errors.Get();
+        if (bLogging)
+        {
+            Result.SessionErrors = Errors.GetErrors();
+            Result.SessionWarnings = Errors.GetWarnings();
+        }
         return Result;
     }
 
@@ -303,9 +324,18 @@ FCFPIETestReceipt UContextForgePIETools::VerifyPIE(
             Result.ObservedPIEWorlds == ContextForgePIE::ExpectedWorlds &&
             Result.SessionErrors.IsEmpty() && !ContextForgePIE::bEndRequested;
         Result.Outcome = Result.bGameplayVerified ? TEXT("PASS") : TEXT("FAIL");
-        Result.Detail = Result.bGameplayVerified ?
-            TEXT("Observed possession and classes on all requested local PIE peers.") :
-            TEXT("At least one peer, expected class, possession, component or log assertion failed.");
+        if (Result.bGameplayVerified)
+        {
+            Result.Detail = Result.SessionWarnings.IsEmpty() ?
+                TEXT("Observed possession and classes on all requested local PIE peers.") :
+                TEXT("Verified all requested peers. Advisory sessionWarnings did not affect PASS.");
+        }
+        else
+        {
+            Result.Detail = Result.SessionErrors.IsEmpty() ?
+                TEXT("At least one peer, class, possession, component or session assertion failed.") :
+                TEXT("Session error/fatal messages were recorded; inspect sessionErrors.");
+        }
     }
     return Result;
 }
@@ -372,3 +402,32 @@ FCFPIETestReceipt UContextForgePIETools::VerifyRestoration()
     }
     return Result;
 }
+
+#if WITH_DEV_AUTOMATION_TESTS
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FContextForgePIELogSeverityTest,
+    "ContextForge.Unreal.PIE.SessionLogSeverity",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter
+)
+
+bool FContextForgePIELogSeverityTest::RunTest(const FString& Parameters)
+{
+    ContextForgePIE::FSessionErrors Capture;
+    const FName Category(TEXT("LogAudioMixerWasapi"));
+    Capture.Serialize(TEXT("Device sample rate conversion will be used."),
+                      ELogVerbosity::Warning, Category);
+    TestEqual(TEXT("Advisory warning recorded"), Capture.GetWarnings().Num(), 1);
+    TestEqual(TEXT("Warning alone is not a blocking error"), Capture.GetErrors().Num(), 0);
+
+    Capture.Serialize(TEXT("Actual PIE failure"), ELogVerbosity::Error, Category);
+    Capture.Serialize(TEXT("Fatal PIE failure"), ELogVerbosity::Fatal, Category);
+    Capture.Serialize(TEXT("Ordinary display message"), ELogVerbosity::Display, Category);
+    TestEqual(TEXT("Errors and fatals block PIE verification"), Capture.GetErrors().Num(), 2);
+    TestEqual(TEXT("Only warning severity enters advisory list"), Capture.GetWarnings().Num(), 1);
+
+    Capture.Reset();
+    TestEqual(TEXT("Reset removes blocking errors"), Capture.GetErrors().Num(), 0);
+    TestEqual(TEXT("Reset removes advisory warnings"), Capture.GetWarnings().Num(), 0);
+    return true;
+}
+#endif

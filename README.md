@@ -2,7 +2,7 @@
 
 A thin third-party ContextForge adapter for Epic Games' official Unreal Engine MCP server.
 
-Version 2.3 ships a **managed UE 5.8 engine-wide editor plugin** for Blueprint interface add/list/remove, compiler diagnostics, verified components, targeted graph edits and PIE assertions. It extends Epic's official ToolsetRegistry, without introducing a second MCP server. The adapter and plugin use one version and one npm release. Install once per compatible Unreal Engine build, not once per project. See [engine-wide deployment](unreal/README.md).
+Version 2.3.1 ships a **managed UE 5.8 engine-wide editor plugin** for Blueprint interface add/list/remove, compiler diagnostics, verified components, targeted graph edits and PIE assertions. It extends Epic's official ToolsetRegistry, without introducing a second MCP server. The adapter and plugin use one version and one npm release. Install once per compatible Unreal Engine build, not once per project. See [engine-wide deployment](unreal/README.md).
 
 ## What it does
 
