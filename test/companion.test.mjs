@@ -43,6 +43,29 @@ test("native toolsets keep exact mutation receipts and context-preserving graph 
   assert.match(blueprintCPP, /SaveLoadedAsset\(Blueprint, true\)/);
 });
 
+test("PIE warnings remain visible without poisoning the gameplay verdict", () => {
+  const header = read("unreal/Plugins/ContextForgeUnrealTools/Source/ContextForgeUnrealTools/Private/ContextForgePIETools.h");
+  const cpp = read("unreal/Plugins/ContextForgeUnrealTools/Source/ContextForgeUnrealTools/Private/ContextForgePIETools.cpp");
+  assert.match(header, /SessionWarnings/);
+  assert.match(cpp, /Verbosity & ELogVerbosity::VerbosityMask/);
+  assert.match(cpp, /Level == ELogVerbosity::Warning \? Warnings : ErrorLines/);
+  assert.match(cpp, /Result.SessionErrors = Errors.GetErrors\(\)/);
+  assert.match(cpp, /Result.SessionWarnings = Errors.GetWarnings\(\)/);
+  assert.match(cpp, /Result.SessionErrors.IsEmpty\(\)/);
+  assert.match(cpp, /ContextForge\.Unreal\.PIE\.SessionLogSeverity/);
+});
+
+test("abstract components are refused before Unreal allocates an SCS node", () => {
+  const cpp = read("unreal/Plugins/ContextForgeUnrealTools/Source/ContextForgeUnrealTools/Private/ContextForgeBlueprintTools.cpp");
+  const smoke = read("test/ue58-smoke.py");
+  const guard = cpp.indexOf("Class->HasAnyClassFlags(CLASS_Abstract)");
+  const create = cpp.indexOf("SCS->CreateNode(Class, RequestedName)");
+  assert.ok(guard >= 0 && create > guard, "concrete-class guard precedes SCS mutation");
+  assert.match(cpp, /ABSTRACT_COMPONENT_CLASS/);
+  assert.match(smoke, /not abstract.mutation_attempted/);
+  assert.match(smoke, /\/Script\/Engine\.BoxComponent/);
+});
+
 test("full-trust Python is project-bound, returns execution results, and defaults to WRITE", async () => {
   const scripting = read(
     "unreal/Plugins/ContextForgeUnrealTools/Content/Python/contextforge_unreal_scripting.py"

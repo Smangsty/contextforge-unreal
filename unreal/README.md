@@ -40,11 +40,11 @@ After launching Unreal, verify the ContextForgeBlueprintTools native methods app
 | ContextForgeBlueprintTools | AddInterface | Adds an interface idempotently, compiles and checks the result |
 | ContextForgeBlueprintTools | RemoveInterface | Refuses inherited removal and gates destructive removal |
 | ContextForgeBlueprintTools | CompileWithDiagnostics | Reports actual compile warnings/errors and status |
-| ContextForgeBlueprintTools | AddComponentVerified | Adds a Blueprint SCS component with compilation/readback |
+| ContextForgeBlueprintTools | AddComponentVerified | Rejects abstract component classes before SCS allocation; verifies concrete components by compilation/readback |
 | ContextForgeBlueprintTools | GetGraphSnapshot | Inspects stable nodes, pins and graph fingerprint |
 | ContextForgeBlueprintTools | RewireGraphConnection | Precondition-guarded targeted rewiring preserving unrelated links |
 | ContextForgePIETools | StartPIE | Requests bounded PIE on an expected clean map |
-| ContextForgePIETools | VerifyPIE | Inspects local peers, possession, roles and expected classes |
+| ContextForgePIETools | VerifyPIE | Inspects peers, possession and class expectations; advisory `sessionWarnings` do not fail gameplay, but errors/fatals block it |
 | ContextForgePIETools | StopPIE | Cancels/stops only an owned PIE session |
 | ContextForgePIETools | VerifyRestoration | Checks all PIE worlds ended and the original map remains |
 | ContextForgeUnrealScripting | execute_python | Explicit opt-in full-trust Python, with project checks and execution receipts |

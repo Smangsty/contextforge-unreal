@@ -40,7 +40,10 @@ struct FCFPIETestReceipt
     UPROPERTY(BlueprintReadOnly, Category="ContextForge") int32 RequestedClients = 0;
     UPROPERTY(BlueprintReadOnly, Category="ContextForge") int32 ObservedPIEWorlds = 0;
     UPROPERTY(BlueprintReadOnly, Category="ContextForge") TArray<FCFPIEPeerProof> Peers;
+    /** Only errors and fatals block gameplay verification. */
     UPROPERTY(BlueprintReadOnly, Category="ContextForge") TArray<FString> SessionErrors;
+    /** Advisory warnings are visible but do not block a gameplay PASS. */
+    UPROPERTY(BlueprintReadOnly, Category="ContextForge") TArray<FString> SessionWarnings;
 };
 
 /** Asynchronous PIE lifecycle, evidence-based possession verification and editor restoration. */
