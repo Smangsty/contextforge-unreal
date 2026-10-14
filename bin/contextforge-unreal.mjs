@@ -19654,7 +19654,7 @@ var REVIEWED_READ_ONLY_TOOLS = Object.freeze([
 ]);
 
 // src/contextforge-unreal.mjs
-var ADAPTER_VERSION = "2.3.1";
+var ADAPTER_VERSION = "2.4.0";
 var DEFAULT_UNREAL_MCP_ENDPOINT = "http://127.0.0.1:8000/mcp";
 var NATIVE_TOOL_SEARCH_TOOLS = Object.freeze([
   "list_toolsets",

@@ -2,7 +2,7 @@
 
 A thin third-party ContextForge adapter for Epic Games' official Unreal Engine MCP server.
 
-Version 2.3.1 ships a **managed UE 5.8 engine-wide editor plugin** for Blueprint interface add/list/remove, compiler diagnostics, verified components, targeted graph edits and PIE assertions. It extends Epic's official ToolsetRegistry, without introducing a second MCP server. The adapter and plugin use one version and one npm release. Install once per compatible Unreal Engine build, not once per project. See [engine-wide deployment](unreal/README.md).
+Version 2.4.0 adds **agent-directed, exact X/Y Blueprint node placement**, detailed node/pin geometry, and rich comment-box inspection and editing to the **managed UE 5.8 engine-wide editor plugin**. Existing Blueprint interface, compiler, component, connection, optional auto-layout, and PIE tools remain available. It extends Epic's official ToolsetRegistry, without introducing a second MCP server. The adapter and plugin use one version and one npm release. Install once per compatible Unreal Engine build, not once per project. See [engine-wide deployment](unreal/README.md).
 
 ## What it does
 
@@ -13,6 +13,12 @@ Unreal Engine 5.8 exposes its official MCP server over local Streamable HTTP. Th
 Additional Editors can be launched with `-ModelContextProtocolPort=N`. ContextForge Unreal v2.3 discovers a bounded loopback range, `8000-8015` by default, identifies each Editor by its actual `.uproject`, and routes calls by project identity rather than treating port 8000 as a global singleton.
 
 ContextForge still sees Unreal's native eager MCP tools directly. In the Unreal project used to validate v2, the Editor exposed 830 direct tools in one `tools/list` response. Those Unreal tool names and authority classifications are preserved. Object input schemas gain only the optional `_contextforgeUnreal` routing field, which the adapter removes before forwarding arguments to Unreal.
+
+## Precision Blueprint authoring
+
+The agent decides the graph layout, not a layout solver. Read `ContextForgeBlueprintTools.GetGraphSnapshot` alongside Epic's existing Blueprint graph/node inspection tools, study the execution/data-pin connections, and choose deliberate graph-space coordinates. `PlaceGraphNodes` accepts explicit GUID-to-X/Y positions and validates stale snapshots, measured-vs-estimated node sizes, untouched neighbors, accidental comment-group membership changes, and preserved connections. It applies the reviewed batch in a single undoable transaction. No node changes are saved unless requested.
+
+`GetGraphSnapshot` also reads existing comment titles, tooltip details, RGBA color, font size, comment bubble preferences, grouping behavior, nested geometric containment, and Unreal's **transient** comment drag-member set, with those two types of membership clearly distinguished. `SetGraphComment` places or updates precisely sized, styled comments around an explicitly reviewed GUID set (including nested comments). It checks for accidental overlap with unrelated nodes, returns a readback receipt, and supports repeated idempotent updates. The older `FormatGraphCluster` and `UpsertGraphComment` remain optional compatibility tools; they are not the default agent workflow. See [native authoring guidance](unreal/README.md).
 
 ## Engine-wide plugin installation
 
