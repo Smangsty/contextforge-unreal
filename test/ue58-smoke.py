@@ -104,6 +104,19 @@ try:
 
     graph = native.get_graph_snapshot(bp_path, "EventGraph")
     must(graph.success and graph.fingerprint, "graph snapshot fingerprint returned")
+    must(bool(graph.layout_fingerprint) and graph.node_geometry is not None,
+         "layout snapshot includes coordinate fingerprint and geometry")
+    layout_stale = native.format_graph_cluster(
+        bp_path, "EventGraph", "stale", [], 120, 60, True, False)
+    must(layout_stale.outcome == "STALE_OR_INVALID_LAYOUT" and
+         not layout_stale.mutation_attempted,
+         "stale layout refused without mutation")
+    comment_stale = native.upsert_graph_comment(
+        bp_path, "EventGraph", "stale", [], "Test", "",
+        unreal.LinearColor(0.2, 0.3, 0.4, 1.0), False)
+    must(comment_stale.outcome == "STALE_OR_INVALID_LAYOUT" and
+         not comment_stale.mutation_attempted,
+         "stale comment refused without mutation")
     stale = native.rewire_graph_connection(
         bp_path, "EventGraph", "stale-fingerprint",
         "none", "none", "none", "none", "none", "none", False)

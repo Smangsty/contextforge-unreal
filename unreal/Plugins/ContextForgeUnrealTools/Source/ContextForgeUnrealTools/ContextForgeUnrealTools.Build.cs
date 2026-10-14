@@ -8,7 +8,8 @@ public class ContextForgeUnrealTools : ModuleRules
         PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "ToolsetRegistry" });
         PrivateDependencyModuleNames.AddRange(new string[] {
             "UnrealEd", "BlueprintGraph", "Kismet", "KismetCompiler",
-            "EditorScriptingUtilities", "MessageLog", "Projects"
+            "EditorScriptingUtilities", "MessageLog", "Projects",
+            "GraphEditor", "Slate", "SlateCore"
         });
     }
 }

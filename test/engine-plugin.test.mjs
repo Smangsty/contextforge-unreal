@@ -53,6 +53,48 @@ async function prepared(t, patch = 3) {
   return { ...fx, build };
 }
 
+test("native graph layout source includes stable geometry, collision guards and MIT notice", async () => {
+  const dir = join(source, "Source", "ContextForgeUnrealTools", "Private");
+  const [header, native, solver, license] = await Promise.all([
+    readFile(join(dir, "ContextForgeBlueprintTools.h"), "utf8"),
+    readFile(join(dir, "ContextForgeBlueprintTools.cpp"), "utf8"),
+    readFile(join(dir, "BPALLayeredLayout.cpp"), "utf8"),
+    readFile(join(dir, "BPAL_LICENSE.txt"), "utf8")
+  ]);
+  assert.match(header, /LayoutFingerprint/);
+  assert.match(header, /bMeasured/);
+  assert.match(header, /FormatGraphCluster/);
+  assert.match(header, /UpsertGraphComment/);
+  assert.match(native, /GetPinImageWidget/);
+  assert.match(native, /LAYOUT_COLLIDES_WITH_UNSELECTED/);
+  assert.match(native, /COMMENT_WOULD_ENCLOSE_UNSELECTED/);
+  assert.match(solver, /FLayeredGraph::Solve/);
+  assert.match(license, /MIT License/);
+});
+
+test("agent-directed precision native tools expose explicit geometry and comment read/write parity", async () => {
+  const dir = join(source, "Source", "ContextForgeUnrealTools", "Private");
+  const [header, native, live] = await Promise.all([
+    readFile(join(dir, "ContextForgeBlueprintTools.h"), "utf8"),
+    readFile(join(dir, "ContextForgeBlueprintTools.cpp"), "utf8"),
+    readFile(join(root, "test", "ue58-precision-positive.py"), "utf8")
+  ]);
+  for (const surface of ["FCFGraphNodePlacement", "PlaceGraphNodes", "SetGraphComment",
+                         "CommentDetails", "CommentColor", "CommentFontSize",
+                         "CommentDragMemberGuids", "GeometricContainedNodeGuids",
+                         "GeometricParentCommentGuids"]) {
+    assert.ok(header.includes(surface), "missing native precision surface: " + surface);
+  }
+  assert.match(native, /ContextForge Position Blueprint Nodes/);
+  assert.match(native, /COMMENT_MEMBERSHIP_WOULD_CHANGE/);
+  assert.match(native, /COMMENT_WOULD_ENCLOSE_OR_OVERLAP_UNSELECTED/);
+  assert.match(native, /GetNodesUnderComment\(\)/);
+  assert.match(native, /ClearNodesUnderComment\(\)/);
+  assert.match(native, /if \(!Node->IsA<UEdGraphNode_Comment>\(\)\)/);
+  assert.match(live, /ALL_TESTS_PASSED/);
+  assert.match(live, /"existing comment restyled and resized with explicit nested contents"/);
+});
+
 test("versioned adapter includes native management CLI and matches plugin descriptor", async () => {
   const pkg = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
   const descriptor = JSON.parse(await readFile(join(source, PLUGIN_NAME + ".uplugin"), "utf8"));
