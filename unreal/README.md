@@ -8,6 +8,8 @@ The implementation was previously smoke-tested against Unreal 5.8.3 on Win64. Th
 
 ## Installation and updates
 
+Version 2.5.2 preserves legacy signed checksum-file lists for known v2.4.0/v2.5.0 managed engine plugins when upgrading. New installations still require the complete current checksum set, including the nested-graph compatibility module. This fixes upgrading the older engine-wide plugin to v2.5.1+ without uninstalling or bypassing tamper protection.
+
 First install/update the contextforge-unreal package through normal ContextForge Discovery review. That same package includes a contextforge-unreal-plugin command for status, preparation, installation, update, and removal.
 
 Run via **the approved ContextForge Command capability** or a trusted terminal on Windows:
