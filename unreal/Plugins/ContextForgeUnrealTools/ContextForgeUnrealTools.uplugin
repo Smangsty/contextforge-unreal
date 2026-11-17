@@ -1,7 +1,7 @@
 {
   "FileVersion": 3,
-  "Version": 20601,
-  "VersionName": "2.6.1",
+  "Version": 20602,
+  "VersionName": "2.6.2",
   "FriendlyName": "ContextForge Unreal Authoring Tools",
   "Description": "Engine-wide UE 5.8 editor authoring, diagnostics and PIE toolsets for Epic's official Unreal MCP registry.",
   "Category": "Editor",
