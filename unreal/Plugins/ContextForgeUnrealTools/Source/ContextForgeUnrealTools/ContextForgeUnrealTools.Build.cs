@@ -7,7 +7,7 @@ public class ContextForgeUnrealTools : ModuleRules
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "ToolsetRegistry" });
         PrivateDependencyModuleNames.AddRange(new string[] {
-            "UnrealEd", "BlueprintGraph", "Kismet", "KismetCompiler",
+            "UnrealEd", "LevelEditor", "BlueprintGraph", "Kismet", "KismetCompiler",
             "EditorScriptingUtilities", "MessageLog", "Projects",
             "GraphEditor", "Slate", "SlateCore", "AnimGraph", "AnimGraphRuntime", "Json", "InputCore", "RewindDebuggerInterface", "GameplayInsights", "TraceServices", "TraceAnalysis"
         });

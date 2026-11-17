@@ -19,6 +19,7 @@
 #include "IRewindDebugger.h"
 #include "IRewindDebuggerModule.h"
 #include "Kismet2/DebuggerCommands.h"
+#include "LevelEditor.h"
 #include "Misc/App.h"
 
 #include "Modules/ModuleManager.h"
@@ -133,7 +134,24 @@ namespace CFD
         {
             return Error(TEXT("Epic RewindDebugger module is not available"));
         }
-        FGlobalTabmanager::Get()->TryInvokeTab(Module->GetMainTabName());
+        FLevelEditorModule* LevelEditor = FModuleManager::Get().GetModulePtr<FLevelEditorModule>(TEXT("LevelEditor"));
+        if (!LevelEditor)
+        {
+            return Error(TEXT("Level Editor module is not available"));
+        }
+        const TSharedPtr<FTabManager> LevelEditorTabs = LevelEditor->GetLevelEditorTabManager();
+        if (!LevelEditorTabs.IsValid())
+        {
+            return Error(TEXT("Level Editor tab manager is not ready"));
+        }
+        if (!LevelEditorTabs->TryInvokeTab(Module->GetMainTabName()).IsValid())
+        {
+            return Error(TEXT("Failed to open Rewind Debugger from the Level Editor tab manager"));
+        }
+        if (!Rewind())
+        {
+            return Error(TEXT("Rewind Debugger tab opened without an initialized debugger instance"));
+        }
         return FString();
     }
 
