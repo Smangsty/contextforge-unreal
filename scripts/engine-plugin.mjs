@@ -23,6 +23,10 @@ const CHECKSUM_FILES = [
   "Content/Python/contextforge_unreal_blueprint_compat.py",
   "Content/Python/contextforge_unreal_scripting.py"
 ];
+// v2.4/v2.5.0 managed installs were signed before nested graph compatibility existed.
+const LEGACY_CHECKSUM_FILES = CHECKSUM_FILES.filter(
+  file => file !== "Content/Python/contextforge_unreal_blueprint_compat.py"
+);
 
 function error(code, detail = "") {
   const result = new Error(detail ? code + ": " + detail : code);
@@ -160,7 +164,9 @@ async function readManagedState(installDir) {
       typeof metadata.version !== "string" || typeof metadata.fingerprint !== "string") {
     throw error("ENGINE_PLUGIN_MANAGED_MARKER_INVALID", marker);
   }
-  if (metadata.fingerprint !== await packageFingerprint(installDir)) {
+  const legacy = metadata.version === "2.4.0" || metadata.version === "2.5.0";
+  const files = legacy ? LEGACY_CHECKSUM_FILES : CHECKSUM_FILES;
+  if (metadata.fingerprint !== await packageFingerprint(installDir, files)) {
     throw error("ENGINE_PLUGIN_INSTALL_TAMPERED", installDir);
   }
   return { installed: true, managed: true, version: metadata.version, metadata };
@@ -206,9 +212,9 @@ async function sha256File(filePath) {
   return createHash("sha256").update(await readFile(filePath)).digest("hex");
 }
 
-async function packageFingerprint(root) {
+async function packageFingerprint(root, files = CHECKSUM_FILES) {
   const hash = createHash("sha256");
-  for (const relativePath of CHECKSUM_FILES) {
+  for (const relativePath of files) {
     const absolute = join(root, ...relativePath.split("/"));
     await requireOrdinaryFile(absolute);
     hash.update(relativePath + "\u0000" + await sha256File(absolute) + "\n");

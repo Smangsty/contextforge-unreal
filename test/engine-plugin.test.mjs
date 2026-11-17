@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -140,6 +141,46 @@ test("engine-wide install, idempotent update and removal do not touch project fi
   assert.equal((await uninstallEnginePlugin(fx.engineRoot, opts)).status, "removed");
   assert.equal((await uninstallEnginePlugin(fx.engineRoot, opts)).status, "already_absent");
   assert.equal((await readFile(projectFile, "utf8")), '{"Plugins":[]}');
+});
+
+test("v2.5.0 managed plugin upgrades without requiring v2.5.1-only checksum files", async t => {
+  const fx = await prepared(t);
+  const opts = { platform: "win32", preparedDir: fx.build.preparedDir, listEditors: noEditors };
+  await installEnginePlugin(fx.engineRoot, opts);
+
+  // Re-create an authentic signed v2.5.0 layout: its marker was calculated
+  // over four files, and did not include the nested-graph compatibility module.
+  const descPath = join(fx.installDir, PLUGIN_NAME + ".uplugin");
+  const descriptor = JSON.parse(await readFile(descPath, "utf8"));
+  descriptor.Version = 20500;
+  descriptor.VersionName = "2.5.0";
+  await writeFile(descPath, JSON.stringify(descriptor));
+  await rm(join(fx.installDir, "Content", "Python", "contextforge_unreal_blueprint_compat.py"));
+
+  const oldFiles = [
+    "ContextForgeUnrealTools.uplugin",
+    "Binaries/Win64/UnrealEditor-ContextForgeUnrealTools.dll",
+    "Content/Python/init_unreal.py",
+    "Content/Python/contextforge_unreal_scripting.py"
+  ];
+  const hash = createHash("sha256");
+  for (const file of oldFiles) {
+    const content = await readFile(join(fx.installDir, ...file.split("/")));
+    hash.update(file + "\u0000" + createHash("sha256").update(content).digest("hex") + "\n");
+  }
+  const markerPath = join(fx.installDir, INSTALL_MARKER);
+  const marker = JSON.parse(await readFile(markerPath, "utf8"));
+  marker.version = "2.5.0";
+  marker.fingerprint = hash.digest("hex");
+  await writeFile(markerPath, JSON.stringify(marker));
+
+  const legacy = await getEnginePluginStatus(fx.engineRoot, opts);
+  assert.equal(legacy.managed, true);
+  assert.equal(legacy.version, "2.5.0");
+  assert.equal((await installEnginePlugin(fx.engineRoot, opts)).status, "updated");
+  const upgraded = await getEnginePluginStatus(fx.engineRoot, opts);
+  assert.equal(upgraded.version, await readSourceVersion());
+  assert.equal(upgraded.managed, true);
 });
 
 test("installer refuses to alter an engine with running Unreal editors", async t => {
