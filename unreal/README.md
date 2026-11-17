@@ -47,11 +47,20 @@ After launching Unreal, verify the ContextForgeBlueprintTools native methods app
 | ContextForgeBlueprintTools | FormatGraphCluster | Optional legacy automatic layered layout for explicitly selected GUIDs; uses measured geometry when available and labeled estimates otherwise |
 | ContextForgeBlueprintTools | UpsertGraphComment | Optional legacy auto-sized named/color-coded wrapper for a reviewed cluster |
 | ContextForgeBlueprintTools | RewireGraphConnection | Precondition-guarded targeted rewiring preserving unrelated links |
+| ContextForgeAnimationTools | InspectStateMachine | Inspect machine states, pose assets, callbacks, entry and nested transition rules plus fingerprint |
+| ContextForgeAnimationTools | EnsureStateMachine | Create clean state-machine node with readback and optional compile/save |
+| ContextForgeAnimationTools | UpsertAnimationState | Fingerprint-guarded state and pose-player creation with exact skeleton checks |
+| ContextForgeAnimationTools | UpsertStateTransition | Fingerprint-guarded boolean or negated transition rules without donor callbacks |
+| ContextForgeAnimationTools | ValidateStateMachine | Verify pose links, rules and real compiler diagnostics independently |
 | ContextForgePIETools | StartPIE | Requests bounded PIE on an expected clean map |
 | ContextForgePIETools | VerifyPIE | Inspects peers, possession and class expectations; advisory `sessionWarnings` do not fail gameplay, but errors/fatals block it |
 | ContextForgePIETools | StopPIE | Cancels/stops only an owned PIE session |
 | ContextForgePIETools | VerifyRestoration | Checks all PIE worlds ended and the original map remains |
 | ContextForgeUnrealScripting | execute_python | Explicit opt-in full-trust Python, with project checks and execution receipts |
+
+### Animation state-machine workflow (v2.5.0)
+
+InspectStateMachine returns a fingerprint. EnsureStateMachine creates a new owned machine; then UpsertAnimationState creates each state, with reinspection between edits, a matched USkeleton, and deliberate entry node. UpsertStateTransition binds an existing boolean AnimBP variable to a transition rule with optional negation and an explicit blend duration. No donor callbacks, no second movement authority. Connect the machine pose output using the existing precise Blueprint graph tools. ValidateStateMachine must check every link and compile, and human-visible PIE animation tests remain the final gameplay gate. Running the smoke in disposable CFSmoke.uproject must produce the native log marker CF_ANIM ALL_TESTS_PASSED.
 
 ### Blueprint graph authoring workflow
 

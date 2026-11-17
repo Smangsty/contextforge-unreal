@@ -2,7 +2,7 @@
 
 A thin third-party ContextForge adapter for Epic Games' official Unreal Engine MCP server.
 
-Version 2.4.0 adds **agent-directed, exact X/Y Blueprint node placement**, detailed node/pin geometry, and rich comment-box inspection and editing to the **managed UE 5.8 engine-wide editor plugin**. Existing Blueprint interface, compiler, component, connection, optional auto-layout, and PIE tools remain available. It extends Epic's official ToolsetRegistry, without introducing a second MCP server. The adapter and plugin use one version and one npm release. Install once per compatible Unreal Engine build, not once per project. See [engine-wide deployment](unreal/README.md).
+Version 2.5.0 adds **native UE 5.8 Animation State Machine authoring and verification** with five guarded MCP tools. Version 2.4.0 added **agent-directed, exact X/Y Blueprint node placement**, detailed node/pin geometry, and rich comment-box inspection and editing to the **managed UE 5.8 engine-wide editor plugin**. Existing Blueprint interface, compiler, component, connection, optional auto-layout, and PIE tools remain available. It extends Epic's official ToolsetRegistry, without introducing a second MCP server. The adapter and plugin use one version and one npm release. Install once per compatible Unreal Engine build, not once per project. See [engine-wide deployment](unreal/README.md).
 
 ## What it does
 
@@ -19,6 +19,14 @@ ContextForge still sees Unreal's native eager MCP tools directly. In the Unreal 
 The agent decides the graph layout, not a layout solver. Read `ContextForgeBlueprintTools.GetGraphSnapshot` alongside Epic's existing Blueprint graph/node inspection tools, study the execution/data-pin connections, and choose deliberate graph-space coordinates. `PlaceGraphNodes` accepts explicit GUID-to-X/Y positions and validates stale snapshots, measured-vs-estimated node sizes, untouched neighbors, accidental comment-group membership changes, and preserved connections. It applies the reviewed batch in a single undoable transaction. No node changes are saved unless requested.
 
 `GetGraphSnapshot` also reads existing comment titles, tooltip details, RGBA color, font size, comment bubble preferences, grouping behavior, nested geometric containment, and Unreal's **transient** comment drag-member set, with those two types of membership clearly distinguished. `SetGraphComment` places or updates precisely sized, styled comments around an explicitly reviewed GUID set (including nested comments). It checks for accidental overlap with unrelated nodes, returns a readback receipt, and supports repeated idempotent updates. The older `FormatGraphCluster` and `UpsertGraphComment` remain optional compatibility tools; they are not the default agent workflow. See [native authoring guidance](unreal/README.md).
+
+## Native animation state-machine authoring
+
+The native ContextForgeAnimationTools toolset inspects machines and nested states, creates clean single-asset states (sequence or BlendSpace), creates explicit boolean transition rules with optional negation, and validates exact graph and compiler results. Methods: InspectStateMachine, EnsureStateMachine, UpsertAnimationState, UpsertStateTransition, ValidateStateMachine.
+
+Mutations are scoped, undoable, and default to not saving. State and transition edits require a fresh machine fingerprint, reject mismatched skeletons and missing AnimBP boolean inputs, and provide readback receipts. Re-inspect after each mutation. Donor callbacks and custom rules are not overwritten. Connect the machine output with existing Blueprint graph tools, then verify the pose in normal PIE, not merely through a successful compile.
+
+The test is test/ue58-animation-positive.py in disposable CFSmoke.uproject. Require the Unreal log marker CF_ANIM ALL_TESTS_PASSED. Full-trust Python remains disabled by default.
 
 ## Engine-wide plugin installation
 

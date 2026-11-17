@@ -1,4 +1,5 @@
 #include "ContextForgeBlueprintTools.h"
+#include "ContextForgeAnimationTools.h"
 #include "ContextForgePIETools.h"
 
 #include "Modules/ModuleManager.h"
@@ -10,12 +11,14 @@ public:
     virtual void StartupModule() override
     {
         UToolsetRegistry::RegisterToolsetClass(UContextForgeBlueprintTools::StaticClass());
+        UToolsetRegistry::RegisterToolsetClass(UContextForgeAnimationTools::StaticClass());
         UToolsetRegistry::RegisterToolsetClass(UContextForgePIETools::StaticClass());
     }
 
     virtual void ShutdownModule() override
     {
         UToolsetRegistry::UnregisterToolsetClass(UContextForgePIETools::StaticClass());
+        UToolsetRegistry::UnregisterToolsetClass(UContextForgeAnimationTools::StaticClass());
         UToolsetRegistry::UnregisterToolsetClass(UContextForgeBlueprintTools::StaticClass());
     }
 };

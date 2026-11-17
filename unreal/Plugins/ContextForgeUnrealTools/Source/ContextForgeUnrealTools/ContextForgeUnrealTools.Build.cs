@@ -9,7 +9,7 @@ public class ContextForgeUnrealTools : ModuleRules
         PrivateDependencyModuleNames.AddRange(new string[] {
             "UnrealEd", "BlueprintGraph", "Kismet", "KismetCompiler",
             "EditorScriptingUtilities", "MessageLog", "Projects",
-            "GraphEditor", "Slate", "SlateCore"
+            "GraphEditor", "Slate", "SlateCore", "AnimGraph", "AnimGraphRuntime"
         });
     }
 }
