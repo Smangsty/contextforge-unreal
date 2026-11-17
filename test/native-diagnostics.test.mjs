@@ -38,13 +38,13 @@ test("2.6 diagnostics are integrated into the managed engine-wide editor module"
     readFile(join(nativeDir, "Private", "ContextForgeDiagnosticsTools.cpp"), "utf8")
   ]);
   const descriptor = JSON.parse(descriptorRaw);
-  assert.equal(descriptor.VersionName, "2.6.0");
-  assert.equal(descriptor.Version, 20600);
+  assert.equal(descriptor.VersionName, "2.6.1");
+  assert.equal(descriptor.Version, 20601);
   assert.equal(descriptor.Modules.length, 1, "extend existing module, never launch second MCP server");
   assert.equal(descriptor.Modules[0].Name, "ContextForgeUnrealTools");
   assert.equal(descriptor.Modules[0].Type, "Editor");
   assert.ok(descriptor.Plugins.some(p => p.Name === "GameplayInsights" && p.Enabled));
-  for (const dependency of ["RewindDebuggerInterface", "GameplayInsights", "TraceServices", "TraceAnalysis", "Json"]) {
+  for (const dependency of ["LevelEditor", "RewindDebuggerInterface", "GameplayInsights", "TraceServices", "TraceAnalysis", "Json"]) {
     assert.ok(rules.includes('"' + dependency + '"'), "missing native dependency " + dependency);
   }
   assert.match(module, /RegisterToolsetClass\(UContextForgeDiagnosticsTools::StaticClass\(\)\)/);
@@ -60,6 +60,14 @@ test("2.6 diagnostics are integrated into the managed engine-wide editor module"
   const fullSource = [header, native, module, rules, descriptorRaw].join("\n");
   assert.doesNotMatch(fullSource, /Project_TIB|C:\\Unreal Projects|\/Game\/TIB|BP_Character_Player/,
     "diagnostics must not depend on a specific Unreal project or Blueprint");
+});
+
+test("Rewind initializes through the Level Editor tab manager", async () => {
+  const native = await readFile(join(nativeDir, "Private", "ContextForgeDiagnosticsTools.cpp"), "utf8");
+  assert.match(native, /GetLevelEditorTabManager\(\)/);
+  assert.match(native, /LevelEditorTabs->TryInvokeTab\(Module->GetMainTabName\(\)\)/);
+  assert.doesNotMatch(native, /FGlobalTabmanager::Get\(\)->TryInvokeTab/);
+  assert.match(native, /Rewind Debugger tab opened without an initialized debugger instance/);
 });
 
 test("recorded trace IDs remain strings and diagnostic queries are bounded", async () => {
