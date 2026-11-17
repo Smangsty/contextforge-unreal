@@ -4,6 +4,7 @@
 #include "Animation/AnimInstance.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Common/ProviderLock.h"
 #include "Dom/JsonObject.h"
 #include "Engine/Engine.h"
 #include "Engine/NetDriver.h"
@@ -285,6 +286,7 @@ FString UContextForgeDiagnosticsTools::ListRewindAnimations(const FString& NameF
     const IAnimationProvider* Provider = Session->ReadProvider<IAnimationProvider>(TEXT("AnimationProvider"));
     const IGameplayProvider* Gameplay = Session->ReadProvider<IGameplayProvider>(TEXT("GameplayProvider"));
     if (!Provider) { return CFD::Error(TEXT("No AnimationProvider found in the selected trace")); }
+    TraceServices::FProviderReadScopeLock AnimationReadScope(*Provider);
     const int32 Limit = FMath::Clamp(MaxInstances, 1, 100);
     CFD::FValues Instances;
     int32 Total = 0;
@@ -294,6 +296,7 @@ FString UContextForgeDiagnosticsTools::ListRewindAnimations(const FString& NameF
         FString Name;
         if (Gameplay)
         {
+            TraceServices::FProviderReadScopeLock GameplayReadScope(*Gameplay);
             if (const FObjectInfo* Info = Gameplay->FindObjectInfo(Id))
             {
                 Name = Info->Name ? FString(Info->Name) : FString();
@@ -339,6 +342,7 @@ FString UContextForgeDiagnosticsTools::ReadRewindAnimation(const FString& AnimIn
     TraceServices::FAnalysisSessionReadScope Lock(*Session);
     const IAnimationProvider* Provider = Session->ReadProvider<IAnimationProvider>(TEXT("AnimationProvider"));
     if (!Provider) { return CFD::Error(TEXT("AnimationProvider unavailable")); }
+    TraceServices::FProviderReadScopeLock AnimationReadScope(*Provider);
 
     auto MakeEvent = [&](const TCHAR* Type, double Time) -> CFD::FObject
     {

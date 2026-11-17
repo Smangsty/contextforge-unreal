@@ -38,8 +38,8 @@ test("2.6 diagnostics are integrated into the managed engine-wide editor module"
     readFile(join(nativeDir, "Private", "ContextForgeDiagnosticsTools.cpp"), "utf8")
   ]);
   const descriptor = JSON.parse(descriptorRaw);
-  assert.equal(descriptor.VersionName, "2.6.1");
-  assert.equal(descriptor.Version, 20601);
+  assert.equal(descriptor.VersionName, "2.6.2");
+  assert.equal(descriptor.Version, 20602);
   assert.equal(descriptor.Modules.length, 1, "extend existing module, never launch second MCP server");
   assert.equal(descriptor.Modules[0].Name, "ContextForgeUnrealTools");
   assert.equal(descriptor.Modules[0].Type, "Editor");
@@ -68,6 +68,16 @@ test("Rewind initializes through the Level Editor tab manager", async () => {
   assert.match(native, /LevelEditorTabs->TryInvokeTab\(Module->GetMainTabName\(\)\)/);
   assert.doesNotMatch(native, /FGlobalTabmanager::Get\(\)->TryInvokeTab/);
   assert.match(native, /Rewind Debugger tab opened without an initialized debugger instance/);
+});
+
+test("Rewind trace readers use Epic provider-scoped read locks", async () => {
+  const native = await readFile(join(nativeDir, "Private", "ContextForgeDiagnosticsTools.cpp"), "utf8");
+  assert.match(native, /#include "Common\/ProviderLock\.h"/);
+  assert.equal((native.match(/FProviderReadScopeLock AnimationReadScope\(\*Provider\)/g) ?? []).length, 2,
+    "listing and timeline reading must both hold animation provider locks");
+  assert.match(native, /FProviderReadScopeLock GameplayReadScope\(\*Gameplay\)/,
+    "gameplay provider names require their own read lock");
+  assert.match(native, /FAnalysisSessionReadScope Lock\(\*Session\)/);
 });
 
 test("recorded trace IDs remain strings and diagnostic queries are bounded", async () => {
