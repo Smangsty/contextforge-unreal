@@ -8,7 +8,7 @@ The implementation was previously smoke-tested against Unreal 5.8.3 on Win64. Th
 
 ## Installation and updates
 
-Version 2.5.2 preserves legacy signed checksum-file lists for known v2.4.0/v2.5.0 managed engine plugins when upgrading. New installations still require the complete current checksum set, including the nested-graph compatibility module. This fixes upgrading the older engine-wide plugin to v2.5.1+ without uninstalling or bypassing tamper protection.
+Version 2.6.0 adds ContextForgeDiagnosticsTools for recording and reading animation traces, live pose/actor inspection, networking and curated overlays in the same engine-wide plugin. Version 2.5.2 preserves legacy signed checksum-file lists for known v2.4.0/v2.5.0 managed engine plugins when upgrading. New installations still require the complete current checksum set, including the nested-graph compatibility module. This fixes upgrading the older engine-wide plugin to v2.5.1+ without uninstalling or bypassing tamper protection.
 
 First install/update the contextforge-unreal package through normal ContextForge Discovery review. That same package includes a contextforge-unreal-plugin command for status, preparation, installation, update, and removal.
 
@@ -58,8 +58,27 @@ After launching Unreal, verify the ContextForgeBlueprintTools native methods app
 | ContextForgePIETools | VerifyPIE | Inspects peers, possession and class expectations; advisory `sessionWarnings` do not fail gameplay, but errors/fatals block it |
 | ContextForgePIETools | StopPIE | Cancels/stops only an owned PIE session |
 | ContextForgePIETools | VerifyRestoration | Checks all PIE worlds ended and the original map remains |
-| ContextForgeUnrealScripting | execute_python | Explicit opt-in full-trust Python, with project checks and execution receipts |
+| ContextForgeDiagnosticsTools | GetDiagnosticsCapabilities | Engine/version, active worlds, native Rewind availability |
+| ContextForgeDiagnosticsTools | GetRewindStatus | Rewind recording, analysis and timeline status |
+| ContextForgeDiagnosticsTools | OpenRewindDebugger | Opens Epic's Rewind debugger tab (WRITE) |
+| ContextForgeDiagnosticsTools | StartRewindRecording | Requests native PIE trace recording (WRITE) |
+| ContextForgeDiagnosticsTools | StopRewindRecording | Stops recording via Epic's registered action (WRITE) |
+| ContextForgeDiagnosticsTools | ListRewindAnimations | Finds recorded AnimInstance IDs with a bounded filter |
+| ContextForgeDiagnosticsTools | ReadRewindAnimation | Bounded animation state/sequence/BlendSpace/node-value trace |
+| ContextForgeDiagnosticsTools | ListLiveActors | Discovers live actors by name across PIE/game worlds |
+| ContextForgeDiagnosticsTools | InspectLiveActor | Inspects animation flags/states, bones, sockets, actor and camera transforms |
+| ContextForgeDiagnosticsTools | GetNetworkDiagnostics | Reads PIE network modes, drivers and connection counts |
+| ContextForgeDiagnosticsTools | ToggleDebugOverlay | Allowlisted Epic stat/showdebug overlays (WRITE) || ContextForgeUnrealScripting | execute_python | Explicit opt-in full-trust Python, with project checks and execution receipts |
 
+### Native Rewind and live diagnostics (v2.6.0)
+
+`ContextForgeDiagnosticsTools` is registered within the **existing** `ContextForgeUnrealTools` editor module. Epic's GameplayInsights plugin is declared as a dependency. No project classes, packages, map names or paths are assumed. All target actors, animation instance IDs, bone/socket names and trace windows are selected from discovered runtime values.
+
+Suggested troubleshooting sequence: start PIE, call `ListLiveActors` and `InspectLiveActor` to identify the active skeletal mesh and animation states; open Rewind with `OpenRewindDebugger`, start recording, reproduce the issue, stop recording, then list recorded animation instances and read a bounded animation trace. Compare state-machine activity, sequence positions and BlendSpace coordinates before proposing gameplay changes. `GetNetworkDiagnostics` and allowlisted `ToggleDebugOverlay` values provide supporting evidence for multiplayer and frame-time problems.
+
+The trace reader accepts decimal animation IDs as **strings** to preserve 64-bit precision and caps results to 60 seconds and 500 events. Actor discovery is limited to 200 items, detailed actor inspection to 8, and bone/socket requests to 12. Tool output distinguishes missing trace providers and empty timelines from a validated negative result. If Rewind has no analysis session, the reader reports a failure instead of inventing animation evidence.
+
+Inspection methods are reviewed READ operations. `OpenRewindDebugger`, `StartRewindRecording`, `StopRewindRecording` and `ToggleDebugOverlay` remain WRITE-classified, since they change editor recording or display state. Only a curated allowlist of Epic stat/showdebug commands is accepted. An editor restart and live MCP discovery after installation are required for runtime acceptance; module compilation alone is insufficient.
 ### Animation state-machine workflow (v2.5.0)
 
 InspectStateMachine returns a fingerprint. EnsureStateMachine creates a new owned machine; then UpsertAnimationState creates each state, with reinspection between edits, a matched USkeleton, and deliberate entry node. UpsertStateTransition binds an existing boolean AnimBP variable to a transition rule with optional negation and an explicit blend duration. No donor callbacks, no second movement authority. Connect the machine pose output using the existing precise Blueprint graph tools. ValidateStateMachine must check every link and compile, and human-visible PIE animation tests remain the final gameplay gate. Running the smoke in disposable CFSmoke.uproject must produce the native log marker CF_ANIM ALL_TESTS_PASSED.
