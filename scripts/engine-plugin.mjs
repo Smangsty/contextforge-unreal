@@ -20,6 +20,7 @@ const CHECKSUM_FILES = [
   "ContextForgeUnrealTools.uplugin",
   "Binaries/Win64/UnrealEditor-ContextForgeUnrealTools.dll",
   "Content/Python/init_unreal.py",
+  "Content/Python/contextforge_unreal_blueprint_compat.py",
   "Content/Python/contextforge_unreal_scripting.py"
 ];
 

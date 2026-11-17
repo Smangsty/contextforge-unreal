@@ -1,5 +1,6 @@
 node_modules/
 *.tgz
+__pycache__/
 .DS_Store
 
 # Created by UE BuildPlugin during packaging, not source-controlled.
