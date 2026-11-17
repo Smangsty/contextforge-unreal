@@ -19403,6 +19403,13 @@ import { pathToFileURL } from "node:url";
 
 // src/read-only-tools.mjs
 var REVIEWED_READ_ONLY_TOOLS = Object.freeze([
+  "ContextForgeUnrealTools.ContextForgeDiagnosticsTools.GetDiagnosticsCapabilities",
+  "ContextForgeUnrealTools.ContextForgeDiagnosticsTools.GetNetworkDiagnostics",
+  "ContextForgeUnrealTools.ContextForgeDiagnosticsTools.GetRewindStatus",
+  "ContextForgeUnrealTools.ContextForgeDiagnosticsTools.InspectLiveActor",
+  "ContextForgeUnrealTools.ContextForgeDiagnosticsTools.ListLiveActors",
+  "ContextForgeUnrealTools.ContextForgeDiagnosticsTools.ListRewindAnimations",
+  "ContextForgeUnrealTools.ContextForgeDiagnosticsTools.ReadRewindAnimation",
   "EditorToolset.EditorAppToolset.CaptureAssetImage",
   "EditorToolset.EditorAppToolset.CaptureEditorImage",
   "EditorToolset.EditorAppToolset.CaptureViewport",
@@ -19654,7 +19661,7 @@ var REVIEWED_READ_ONLY_TOOLS = Object.freeze([
 ]);
 
 // src/contextforge-unreal.mjs
-var ADAPTER_VERSION = "2.5.2";
+var ADAPTER_VERSION = "2.6.0";
 var DEFAULT_UNREAL_MCP_ENDPOINT = "http://127.0.0.1:8000/mcp";
 var NATIVE_TOOL_SEARCH_TOOLS = Object.freeze([
   "list_toolsets",

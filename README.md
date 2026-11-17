@@ -2,7 +2,7 @@
 
 A thin third-party ContextForge adapter for Epic Games' official Unreal Engine MCP server.
 
-Version 2.5.2 fixes verified upgrades from earlier managed engine plugins without weakening checksum integrity. Version 2.5.1 repairs **Epic BlueprintTools node discovery and creation inside nested animation-state graphs** without changing engine files. Version 2.5.0 adds **native UE 5.8 Animation State Machine authoring and verification** with five guarded MCP tools. Version 2.4.0 added **agent-directed, exact X/Y Blueprint node placement**, detailed node/pin geometry, and rich comment-box inspection and editing to the **managed UE 5.8 engine-wide editor plugin**. Existing Blueprint interface, compiler, component, connection, optional auto-layout, and PIE tools remain available. It extends Epic's official ToolsetRegistry, without introducing a second MCP server. The adapter and plugin use one version and one npm release. Install once per compatible Unreal Engine build, not once per project. See [engine-wide deployment](unreal/README.md).
+Version 2.6.0 introduces native, project-agnostic Rewind Debugger controls, bounded animation trace reads, live actor/pose inspection, networking diagnostics, and curated Epic stat overlays. Version 2.5.2 fixes verified upgrades from earlier managed engine plugins without weakening checksum integrity. Version 2.5.1 repairs **Epic BlueprintTools node discovery and creation inside nested animation-state graphs** without changing engine files. Version 2.5.0 adds **native UE 5.8 Animation State Machine authoring and verification** with five guarded MCP tools. Version 2.4.0 added **agent-directed, exact X/Y Blueprint node placement**, detailed node/pin geometry, and rich comment-box inspection and editing to the **managed UE 5.8 engine-wide editor plugin**. Existing Blueprint interface, compiler, component, connection, optional auto-layout, and PIE tools remain available. It extends Epic's official ToolsetRegistry, without introducing a second MCP server. The adapter and plugin use one version and one npm release. Install once per compatible Unreal Engine build, not once per project. See [engine-wide deployment](unreal/README.md).
 
 ## What it does
 
@@ -28,6 +28,11 @@ Mutations are scoped, undoable, and default to not saving. State and transition 
 
 The test is test/ue58-animation-positive.py in disposable CFSmoke.uproject. Require the Unreal log marker CF_ANIM ALL_TESTS_PASSED. Full-trust Python remains disabled by default.
 
+## Native debugging and Rewind (v2.6.0)
+
+`ContextForgeDiagnosticsTools` adds native, **project-independent** diagnostics to the existing managed `ContextForgeUnrealTools` editor plugin. It uses Epic's Rewind Debugger and Gameplay Insights traces rather than screenshots or a second MCP server. The trace reader reports state-machine activity, sequence playback, BlendSpace inputs and animation node values within caller-bounded time and event limits. Runtime inspection discovers PIE worlds, matching actors, animation states/flags, skeletal bones and sockets, camera transforms and networking status. Curated `stat`/`showdebug` overlays are also available.
+
+The inspection methods are explicitly reviewed as READ. Opening Rewind, starting/stopping recording and toggling overlays remain WRITE, and do not alter gameplay assets. These tools must be discovered and tested in a **restarted editor** after a managed engine plugin update; static registration or a successful C++ build does not prove a working runtime trace. See [diagnostics workflow and method reference](unreal/README.md).
 ## Engine-wide plugin installation
 
 The same npm distribution includes `contextforge-unreal-plugin`, an explicitly invoked manager for build, status, install/update, and uninstall. There is **no automatic engine mutation** when the adapter launches or updates. ContextForge can invoke the manager through its approved Command capability during setup and future updates. The manager installs a UE-build-specific compiled plugin in `Engine/Plugins/Marketplace/ContextForgeUnrealTools`, never into a project. See [installation and safety rules](unreal/README.md).
@@ -45,7 +50,7 @@ After changing **Enable Tool Search**, restart the Unreal MCP server.
 
 Unreal 5.8 eager tools currently do not provide MCP read/write annotations.
 
-ContextForge Unreal therefore carries a reviewed exact-name READ manifest in `src/read-only-tools.mjs`. The current reviewed manifest contains 248 exact Unreal 5.8 tools. Existing manually reviewed entries are retained, and new Python-backed entries are admitted only after static review of Epic's installed UE 5.8 `tool_call` implementations. Ambiguous or mutating implementations remain WRITE. Every unlisted or newly introduced Unreal tool defaults to WRITE.
+ContextForge Unreal therefore carries a reviewed exact-name READ manifest in `src/read-only-tools.mjs`. The current reviewed manifest contains 255 exact Unreal 5.8 tools. Existing manually reviewed entries are retained, and new Python-backed entries are admitted only after static review of Epic's installed UE 5.8 `tool_call` implementations. Ambiguous or mutating implementations remain WRITE. Every unlisted or newly introduced Unreal tool defaults to WRITE.
 
 This is intentionally conservative. The adapter never uses runtime naming heuristics as security authority.
 

@@ -90,7 +90,7 @@ test("field-audited material inspection tools are READ", () => {
 });
 
 test("reviewed READ manifest is exact, sorted, and duplicate-free", () => {
-  assert.equal(REVIEWED_READ_ONLY_TOOLS.length, 248);
+  assert.equal(REVIEWED_READ_ONLY_TOOLS.length, 255);
   assert.deepEqual(REVIEWED_READ_ONLY_TOOLS, [...REVIEWED_READ_ONLY_TOOLS].sort());
   assert.equal(new Set(REVIEWED_READ_ONLY_TOOLS).size, REVIEWED_READ_ONLY_TOOLS.length);
 });

@@ -10,6 +10,13 @@
 // Every Unreal tool not listed here is intentionally exposed as WRITE.
 
 export const REVIEWED_READ_ONLY_TOOLS = Object.freeze([
+  "ContextForgeUnrealTools.ContextForgeDiagnosticsTools.GetDiagnosticsCapabilities",
+  "ContextForgeUnrealTools.ContextForgeDiagnosticsTools.GetNetworkDiagnostics",
+  "ContextForgeUnrealTools.ContextForgeDiagnosticsTools.GetRewindStatus",
+  "ContextForgeUnrealTools.ContextForgeDiagnosticsTools.InspectLiveActor",
+  "ContextForgeUnrealTools.ContextForgeDiagnosticsTools.ListLiveActors",
+  "ContextForgeUnrealTools.ContextForgeDiagnosticsTools.ListRewindAnimations",
+  "ContextForgeUnrealTools.ContextForgeDiagnosticsTools.ReadRewindAnimation",
   "EditorToolset.EditorAppToolset.CaptureAssetImage",
   "EditorToolset.EditorAppToolset.CaptureEditorImage",
   "EditorToolset.EditorAppToolset.CaptureViewport",
