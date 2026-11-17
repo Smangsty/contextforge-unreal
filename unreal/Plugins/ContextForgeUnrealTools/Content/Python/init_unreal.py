@@ -2,6 +2,16 @@
 import os
 import unreal
 
+# Restore Epic BlueprintTools' node discovery and creation on nested animation
+# state graphs without changing installed Unreal Engine source files.
+# Full-trust Python execution remains opt-in and unrelated to this patch.
+try:
+    from contextforge_unreal_blueprint_compat import install as _install_blueprint_compat
+    _compat_result = _install_blueprint_compat()
+    unreal.log("[ContextForgeUnrealTools] Nested graph compatibility: " + _compat_result)
+except Exception as exc:
+    unreal.log_error("[ContextForgeUnrealTools] Nested graph compatibility failed: " + str(exc))
+
 if os.environ.get("CONTEXTFORGE_UNREAL_ENABLE_FULL_TRUST_PYTHON") == "1":
     from contextforge_unreal_scripting import ContextForgeUnrealScripting
 
